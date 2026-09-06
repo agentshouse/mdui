@@ -13,7 +13,8 @@ surfaces of the MD Runtime.
 ## What to build
 
 The first custom elements: the Markdown renderer, which renders section text
-under the MD Model's Markdown syntax profile, executes no script, keeps raw
+under the MD Model's Markdown syntax profile, GitHub Flavored Markdown at the
+specification version the MD Model pins, executes no script, keeps raw
 HTML only for details and summary, emits image and resource references for
 the bundle's policy to decide, and resolves each internal link to a Path in
 the same Room reported as an event for the host; and one field control per

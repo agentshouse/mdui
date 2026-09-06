@@ -39,8 +39,9 @@ suffix are recorded in their owners.
       lane, the browser lane, and the static lane, each green on the empty
       project with one placeholder spec per lane.
 - [ ] The browser lane runs real browser specs through Playwright with the
-      App served from its source without a bundle step and the in-memory
-      Adapter exported by the MD Runtime package.
+      App served from its source without a bundle step; the placeholder spec
+      loads the App and the MD Runtime package, and the in-memory Adapter
+      that package exports is used from `components/01` on.
 - [ ] The static lane enforces the neutrality rule through dependency-cruiser:
       a planted Provider-specific import outside the Adapter package fails
       the lane and removing it passes.
@@ -51,9 +52,11 @@ suffix are recorded in their owners.
 ## Mines
 
 Waits for `foundation/01` in `agentshouse/mdruntime`, which lays the two
-packages this project consumes; until they publish, they are consumed from
-that repository's main branch as Git dependencies, and this ticket records
-how. No behavior lands here. Comments in code are not allowed. A folder is a
+packages this project consumes, and for their first prerelease on npm under
+`@agentshouse`, which the User publishes from that repository's main branch;
+this project pins published prereleases and never a Git or path dependency,
+because npm cannot install one package of a Git workspace and an App
+Creator's fork must install from npm. No behavior lands here. Comments in code are not allowed. A folder is a
 namespace, so file names do not repeat it. Derived artifacts stay in
 gitignored `tmp/`. Keep the existing `npm run ops` backlog and merge
 commands; Compose is the test runner, not a second operator CLI. No framework
