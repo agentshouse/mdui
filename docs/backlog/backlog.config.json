@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 12,
+  "statuses": [
+    "needs-triage",
+    "needs-info",
+    "blocked",
+    "ready-for-agent",
+    "ready-for-human",
+    "wontfix",
+    "resolved"
+  ],
+  "openStatuses": [
+    "needs-triage",
+    "needs-info",
+    "blocked",
+    "ready-for-agent",
+    "ready-for-human"
+  ],
+  "terminalStatuses": ["wontfix", "resolved"],
+  "historicalUnclassifiedTickets": "docs/backlog/historical-unclassified.txt",
+  "ownerships": [
+    {
+      "id": "workspace",
+      "title": "Workspace",
+      "description": "The repository workspace, stack, and the Compose runner that every later ticket uses.",
+      "includes": [
+        "npm project layout",
+        "pinned toolchain",
+        "Compose as the check runner",
+        "Recorded commands in AGENTS.md and TESTING.md"
+      ],
+      "excludes": [
+        "Component or screen behavior",
+        "The bundle build"
+      ]
+    },
+    {
+      "id": "components",
+      "title": "Components",
+      "description": "The custom elements: Markdown renderer, field controls, Document View, and the Sync Status indicator.",
+      "includes": [
+        "Markdown renderer and field controls",
+        "Document View reading, editing, and the refused-Draft flow",
+        "The Sync Status indicator"
+      ],
+      "excludes": [
+        "The screens of main",
+        "MD Runtime behavior",
+        "The bundle build"
+      ]
+    },
+    {
+      "id": "screens",
+      "title": "Screens",
+      "description": "The screens of the main branch composed from the components over the MD Runtime API.",
+      "includes": [
+        "Rooms, Search, File, Work, Refusal, Storage, and Log",
+        "Local Search",
+        "Launch promises on every screen"
+      ],
+      "excludes": [
+        "Component internals",
+        "The bundle build and the release"
+      ]
+    },
+    {
+      "id": "shipped-form",
+      "title": "Shipped form",
+      "description": "The static bundle build, the agent instruction file, and the release declaration.",
+      "includes": [
+        "Bundle build with the Content Security Policy",
+        "Instructions for the App Creator's agent",
+        "The release over a real Agents House Building"
+      ],
+      "excludes": [
+        "Component or screen behavior",
+        "Package publication, which is agentshouse/mdruntime's"
+      ]
+    }
+  ],
+  "delivery": {
+    "tracks": [
+      {
+        "id": "workspace",
+        "title": "Workspace",
+        "outcome": "The npm project, Compose runner, and recorded stack exist without product behavior.",
+        "tickets": ["foundation/01-choose-the-stack-and-lay-the-workspace"]
+      },
+      {
+        "id": "components",
+        "title": "Components",
+        "outcome": "The renderer, field controls, Document View, and the Sync Status indicator work over the in-memory Adapter in a real browser.",
+        "tickets": [
+          "components/01-markdown-renderer-and-field-controls",
+          "components/02-document-view-reading-and-the-sync-status-indicator",
+          "components/03-document-view-editing"
+        ]
+      },
+      {
+        "id": "screens",
+        "title": "Screens",
+        "outcome": "The main branch runs end to end over the in-memory Adapter with the launch promises kept.",
+        "tickets": ["components/04-the-screens"]
+      },
+      {
+        "id": "shipped-form",
+        "title": "Shipped form",
+        "outcome": "Main builds to a static bundle with its policy, carries the agent instructions, and runs over a real Agents House Building.",
+        "tickets": ["shipped-form/01-bundle-build-agent-instructions-and-release"]
+      }
+    ],
+    "ownership": {
+      "foundation/01-choose-the-stack-and-lay-the-workspace": "workspace",
+      "components/01-markdown-renderer-and-field-controls": "components",
+      "components/02-document-view-reading-and-the-sync-status-indicator": "components",
+      "components/03-document-view-editing": "components",
+      "components/04-the-screens": "screens",
+      "shipped-form/01-bundle-build-agent-instructions-and-release": "shipped-form"
+    },
+    "dependencies": {
+      "components/01-markdown-renderer-and-field-controls": [
+        "foundation/01-choose-the-stack-and-lay-the-workspace"
+      ],
+      "components/04-the-screens": ["components/03-document-view-editing"],
+      "shipped-form/01-bundle-build-agent-instructions-and-release": [
+        "components/04-the-screens"
+      ]
+    }
+  },
+  "ownershipGroups": [
+    {
+      "id": "platform",
+      "kind": "ownership",
+      "title": "Platform",
+      "short": "Workspace",
+      "ownershipIds": ["workspace"]
+    },
+    {
+      "id": "presentation",
+      "kind": "ownership",
+      "title": "Presentation",
+      "short": "Components and screens",
+      "ownershipIds": ["components", "screens"]
+    },
+    {
+      "id": "release",
+      "kind": "ownership",
+      "title": "Release",
+      "short": "The bundle and the release",
+      "ownershipIds": ["shipped-form"]
+    },
+    {
+      "id": "historical-record",
+      "kind": "history",
+      "title": "Historical record",
+      "short": "Terminal tickets frozen before the Ownership taxonomy"
+    }
+  ],
+  "routingRules": [
+    "Every ticket belongs to exactly one ownership.",
+    "Route by the capability whose observable behavior changes, not by every file touched.",
+    "Split independently verifiable outcomes with different ownership into separate tickets.",
+    "Gates, deadlines, and work types are not ownership; ticket Ownership is assigned in delivery.ownership.",
+    "Bugs, documentation, tests, and technical debt are work types rather than ownerships.",
+    "Do not create miscellaneous, cleanup, or provider-specific ownerships.",
+    "Only terminal tickets frozen in historical-unclassified.txt may remain unclassified."
+  ],
+  "deliveryRules": [
+    "Every open ticket belongs to exactly one delivery Track.",
+    "A Track title is a compact noun phrase; its outcome owns the full result sentence.",
+    "A Track is an ordered outcome chain across PRD execution sets, not a folder or Ownership bucket.",
+    "A Track's own order is its intra-Track dependency; only edges that order cannot express are authored in delivery.dependencies.",
+    "A Track is selectable when its first open ticket has no unresolved dependency; later cross-Track seams are visible but do not block the current ticket.",
+    "The first open ticket is the only next ticket used to calculate an available Track; independently, the User may claim any non-terminal ticket regardless of status, blockers, or Track position."
+  ]
+}

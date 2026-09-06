@@ -1,0 +1,14 @@
+{
+  "name": "mdui",
+  "private": true,
+  "description": "MD UI: the repository every App of MD App is forked from",
+  "license": "UNLICENSED",
+  "packageManager": "npm@11.19.0",
+  "engines": {
+    "node": "24.20.0",
+    "npm": "11.19.0"
+  },
+  "scripts": {
+    "ops": "node -- scripts/ops.mjs"
+  }
+}
