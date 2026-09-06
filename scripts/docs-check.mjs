@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,7 +12,7 @@ function refuse(lines) {
 }
 
 function main() {
-  const files = readdirSync(prdDirectory)
+  const files = (existsSync(prdDirectory) ? readdirSync(prdDirectory) : [])
     .filter((name) => /^prd-\d{4}-.+\.md$/.test(name))
     .sort();
   const errors = [];
