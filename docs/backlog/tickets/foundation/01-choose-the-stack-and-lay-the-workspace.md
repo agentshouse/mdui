@@ -1,6 +1,6 @@
 # 01-choose-the-stack-and-lay-the-workspace - Choose the stack and lay the workspace
 
-Status: blocked
+Status: ready-for-agent
 
 ## Frame
 
