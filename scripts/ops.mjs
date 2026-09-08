@@ -15,7 +15,6 @@ const commands = {
       'test',
       'scripts/ops.mjs',
       'scripts/check.mjs',
-      'scripts/compile.mjs',
       'scripts/host.mjs',
       '*.config.ts',
       'package.json',

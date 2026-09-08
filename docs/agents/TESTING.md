@@ -21,12 +21,12 @@ volume; no host Node installation or browser participates.
 | Pure slice                              | `docker compose run --rm --build check npm run ops -- check pure test/pure/<name>.spec.ts [-t <name>]`       |
 | Browser slice                           | `docker compose run --rm --build check npm run ops -- check browser test/browser/<name>.spec.ts [-g <name>]` |
 | Static lane                             | `docker compose run --rm --build check npm run ops -- check static`                                          |
-| Typecheck, format check, or compilation | `docker compose run --rm --build check npm run ops -- check <typecheck\|format\|compile>`                    |
+| Typecheck or format check               | `docker compose run --rm --build check npm run ops -- check <typecheck\|format>`                             |
 | Apply formatting                        | `docker compose run --rm --build check npm run ops -- format`                                                |
 
-The full gate runs typecheck, format check, swc compilation, pure specs,
-browser specs, and the static lane in that order. Compilation writes
-individual ES modules to `tmp/compiled/`; it is not the bundle build.
+The full gate runs typecheck, format check, pure specs, browser specs, and
+the static lane in that order. The browser lane verifies swc compilation
+by loading the source modules it transforms.
 Operator checks such as `docs check` and `backlog check` also run through
 this service: `docker compose run --rm --build check npm run ops -- docs check`.
 

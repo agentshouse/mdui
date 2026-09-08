@@ -15,9 +15,8 @@ Its application dependencies are `@agentshouse/mdruntime` and
 toolchain and Chromium; each invocation uses this worktree's source and an
 isolated dependency volume. `scripts/ops.mjs` routes the existing backlog,
 documentation, and merge commands together with checks and formatting.
-The check runner compiles TypeScript to ES modules under `tmp/compiled/`,
-checks source imports with dependency-cruiser, and runs the three public
-test seams documented in [`TESTING.md`](docs/agents/TESTING.md).
+The check runner checks source imports with dependency-cruiser and runs the
+three public test seams documented in [`TESTING.md`](docs/agents/TESTING.md).
 
 The browser lane's local host serves the App source. It transforms TypeScript
 on request and maps bare imports through the installed packages' public

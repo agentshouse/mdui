@@ -88,11 +88,9 @@ use the same interface.
 `npm run ops -- <area> <command> [args...]` is the operator interface. Run
 `npm run ops` for its current command list.
 
-Run the full Linux gate with `docker compose run --rm --build check`. Format
-with `docker compose run --rm --build check npm run ops -- format`. For an
-individual lane or spec, use the commands in
-[`docs/agents/TESTING.md`](docs/agents/TESTING.md); all checks run in this
-Compose service.
+For the full Linux gate, formatting, individual lanes, and spec slices, use
+the [runner commands in TESTING.md](docs/agents/TESTING.md#runner). Every
+check runs in that Compose service.
 
 ## Skills and tracker
 
