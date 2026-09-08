@@ -7,6 +7,26 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const node = (script, ...args) => ({ command: process.execPath, args: [script, ...args] });
 
 const commands = {
+  check: node('scripts/check.mjs'),
+  format: {
+    command: 'node_modules/.bin/oxfmt',
+    args: [
+      'src',
+      'test',
+      'scripts/ops.mjs',
+      'scripts/check.mjs',
+      'scripts/host.mjs',
+      '*.config.ts',
+      'package.json',
+      'tsconfig.json',
+      '.dependency-cruiser.cjs',
+      '.oxfmtrc.json',
+      'compose.yaml',
+      'AGENTS.md',
+      'ARCHITECTURE.md',
+      'docs/agents/TESTING.md',
+    ],
+  },
   'docs check': node('scripts/docs-check.mjs'),
   'backlog frontier': node('scripts/backlog-frontier.mjs'),
   'backlog sync': node('scripts/backlog-sync.mjs'),

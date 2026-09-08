@@ -1,6 +1,6 @@
 # 01-choose-the-stack-and-lay-the-workspace - Choose the stack and lay the workspace
 
-Status: ready-for-agent
+Status: resolved
 
 ## Frame
 
@@ -31,21 +31,21 @@ suffix are recorded in their owners.
 
 ## Acceptance criteria
 
-- [ ] The project pins the Node and npm versions Agents House's package
+- [x] The project pins the Node and npm versions Agents House's package
       manifest pins, compiles with TypeScript and swc, tests with Vitest,
       and formats with oxfmt; the source is empty of behavior and depends on
       the two packages and nothing else.
-- [ ] One documented Compose command runs typecheck, format check, the pure
+- [x] One documented Compose command runs typecheck, format check, the pure
       lane, the browser lane, and the static lane, each green on the empty
       project with one placeholder spec per lane.
-- [ ] The browser lane runs real browser specs through Playwright with the
+- [x] The browser lane runs real browser specs through Playwright with the
       App served from its source without a bundle step; the placeholder spec
       loads the App and the MD Runtime package, and the in-memory Adapter
       that package exports is used from `components/01` on.
-- [ ] The static lane enforces the neutrality rule through dependency-cruiser:
+- [x] The static lane enforces the neutrality rule through dependency-cruiser:
       a planted Provider-specific import outside the Adapter package fails
       the lane and removing it passes.
-- [ ] AGENTS.md lists the commands and the engineering conventions the stack
+- [x] AGENTS.md lists the commands and the engineering conventions the stack
       adds; TESTING.md names the runner commands, locations, and suffix;
       ARCHITECTURE.md describes only the project that now exists.
 

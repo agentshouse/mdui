@@ -3,12 +3,41 @@
   "private": true,
   "description": "MD UI: the repository every App of MD App is forked from",
   "license": "UNLICENSED",
-  "packageManager": "npm@11.19.0",
+  "type": "module",
+  "scripts": {
+    "ops": "node -- scripts/ops.mjs"
+  },
+  "dependencies": {
+    "@agentshouse/mdruntime": "0.1.0-alpha.1",
+    "@agentshouse/mdruntime-adapter": "0.1.0-alpha.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@swc/core": "1.16.1",
+    "@types/node": "24.13.3",
+    "dependency-cruiser": "18.2.0",
+    "oxfmt": "0.65.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "npm",
+      "version": "11.19.0",
+      "onFail": "error"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "24.20.0",
+      "onFail": "error"
+    }
+  },
   "engines": {
     "node": "24.20.0",
     "npm": "11.19.0"
   },
-  "scripts": {
-    "ops": "node -- scripts/ops.mjs"
+  "packageManager": "npm@11.19.0",
+  "allowScripts": {
+    "@swc/core@1.16.1": true
   }
 }
