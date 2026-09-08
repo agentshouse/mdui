@@ -60,9 +60,13 @@ instead of being invented during implementation.
   artifacts live in gitignored `tmp/`.
 - Temporary command inputs such as PR bodies and review briefs live under the
   owning worktree's `tmp/`, never a generic host-wide `/tmp` path.
-- Stack-specific structure, naming, and validation commands land here and in
-  `docs/agents/TESTING.md` when chosen. Do not invent a stack during unrelated
-  work.
+- The App is plain HTML and TypeScript ES modules in `src/`, without a
+  framework. Relative module imports use `.js` specifiers. TypeScript checks
+  types, swc compiles, Vitest runs pure and static specs, oxfmt formats, and
+  dependency-cruiser enforces neutrality. Playwright runs browser specs in
+  Chromium over the published MD Runtime's in-memory Adapter.
+- Node, npm, and dependency versions are pinned in `package.json` and
+  `package-lock.json`. Keep the Node and npm pins aligned with Agents House.
 - Dependencies stay minimal: the MD Runtime, the Adapter, and what they pin.
   An App Creator's agent adds whatever its fork needs later.
 
@@ -83,6 +87,12 @@ use the same interface.
 
 `npm run ops -- <area> <command> [args...]` is the operator interface. Run
 `npm run ops` for its current command list.
+
+Run the full Linux gate with `docker compose run --rm --build check`. Format
+with `docker compose run --rm --build check npm run ops -- format`. For an
+individual lane or spec, use the commands in
+[`docs/agents/TESTING.md`](docs/agents/TESTING.md); all checks run in this
+Compose service.
 
 ## Skills and tracker
 

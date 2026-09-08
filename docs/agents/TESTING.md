@@ -7,8 +7,47 @@ when the change needs the additional evidence.
 The implementing agent runs the tests. Merge does not rerun them. The Master
 does not run them.
 
-Concrete runner commands land in this file when the runtime is chosen. Until
-then, name the exact command you ran and keep the cadence below.
+## Runner
+
+Every check runs in the Linux Docker Compose `check` service with the Node,
+npm, and dependency pins in `package.json` and `package-lock.json`. The image
+installs from the lockfile and includes Playwright's Chromium and system
+dependencies. Each run mounts this worktree and gets its own dependency
+volume; no host Node installation or browser participates.
+
+| Decision                                | Command                                                                                                      |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Full gate before the PR                 | `docker compose run --rm --build check`                                                                      |
+| Pure slice                              | `docker compose run --rm --build check npm run ops -- check pure test/pure/<name>.spec.ts [-t <name>]`       |
+| Browser slice                           | `docker compose run --rm --build check npm run ops -- check browser test/browser/<name>.spec.ts [-g <name>]` |
+| Static lane                             | `docker compose run --rm --build check npm run ops -- check static`                                          |
+| Typecheck, format check, or compilation | `docker compose run --rm --build check npm run ops -- check <typecheck\|format\|compile>`                    |
+| Apply formatting                        | `docker compose run --rm --build check npm run ops -- format`                                                |
+
+The full gate runs typecheck, format check, swc compilation, pure specs,
+browser specs, and the static lane in that order. Compilation writes
+individual ES modules to `tmp/compiled/`; it is not the bundle build.
+Operator checks such as `docs check` and `backlog check` also run through
+this service: `docker compose run --rm --build check npm run ops -- docs check`.
+
+The browser runner serves `src/index.html` and compiles requested source
+modules with swc in memory. Its import map resolves the installed
+dependencies' public exports. Playwright loads this App directly, without a
+bundle step or compiled-file dependency. The browser fixture uses
+`@agentshouse/mdruntime/memory`; component specs from `components/01` onward
+use that same public in-memory Adapter. It belongs only to tests and is
+excluded from the eventual bundle by PRD-0005 in `agentshouse/mdruntime`.
+
+The static lane runs dependency-cruiser over `src/` and a specification that
+plants runtime and type-only Provider-specific imports outside the Adapter
+package, observes the `neutrality` error, removes the imports, and observes a
+clean result. Fixtures live under `tmp/` and are removed even on failure.
+The spec uses the lane's error reporter to verify both the nonzero exit and
+the named neutrality error.
+Dependency-cruiser uses its TypeScript parser with pre-compilation
+dependencies included. TypeScript is pinned to `6.0.3` because
+dependency-cruiser `18.2.0` requires the compiler API below version 7; Node
+and npm still use House's current pins.
 
 ## Cadence
 
@@ -60,5 +99,15 @@ a known-good literal, a worked example, or the spec.
 
 ## Location and naming
 
-Tests live at public seams, never against internals. The exact directory layout
-and file suffix are recorded here when the runtime is chosen.
+Tests live at public seams, never against internals, and use `.spec.ts`:
+
+| Location        | Runner and public seam                                                           |
+| --------------- | -------------------------------------------------------------------------------- |
+| `test/pure/`    | Vitest `pure` project: ES modules and pure observable behavior                   |
+| `test/browser/` | Playwright: the App's DOM and its public MD Runtime integration                  |
+| `test/static/`  | Vitest `static` project: the dependency-cruiser command's acceptance and refusal |
+
+The foundation has one specification per lane. Its pure and browser
+placeholders establish loading only; later component and screen tickets
+replace them with their owning public-seam specifications. Browser results
+and traces are written under `tmp/browser/`.
