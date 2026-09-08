@@ -15,14 +15,14 @@ installs from the lockfile and includes Playwright's Chromium and system
 dependencies. Each run mounts this worktree and gets its own dependency
 volume; no host Node installation or browser participates.
 
-| Decision                                | Command                                                                                                      |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Full gate before the PR                 | `docker compose run --rm --build check`                                                                      |
-| Pure slice                              | `docker compose run --rm --build check npm run ops -- check pure test/pure/<name>.spec.ts [-t <name>]`       |
-| Browser slice                           | `docker compose run --rm --build check npm run ops -- check browser test/browser/<name>.spec.ts [-g <name>]` |
-| Static lane                             | `docker compose run --rm --build check npm run ops -- check static`                                          |
-| Typecheck or format check               | `docker compose run --rm --build check npm run ops -- check <typecheck\|format>`                             |
-| Apply formatting                        | `docker compose run --rm --build check npm run ops -- format`                                                |
+| Decision                  | Command                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Full gate before the PR   | `docker compose run --rm --build check`                                                                      |
+| Pure slice                | `docker compose run --rm --build check npm run ops -- check pure test/pure/<name>.spec.ts [-t <name>]`       |
+| Browser slice             | `docker compose run --rm --build check npm run ops -- check browser test/browser/<name>.spec.ts [-g <name>]` |
+| Static lane               | `docker compose run --rm --build check npm run ops -- check static`                                          |
+| Typecheck or format check | `docker compose run --rm --build check npm run ops -- check <typecheck\|format>`                             |
+| Apply formatting          | `docker compose run --rm --build check npm run ops -- format`                                                |
 
 The full gate runs typecheck, format check, pure specs, browser specs, and
 the static lane in that order. The browser lane verifies swc compilation
