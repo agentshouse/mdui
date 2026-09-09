@@ -25,8 +25,7 @@ if (
 for (const name of lane === undefined ? Object.keys(commands) : [lane]) {
   process.stdout.write(`check: ${name}\n`);
   for (const [command, ...fixed] of commands[name]) {
-    const optional = name === 'pure' && args.length === 0 ? ['--passWithNoTests'] : [];
-    const result = spawnSync(command, [...fixed, ...optional, ...args], { stdio: 'inherit' });
+    const result = spawnSync(command, [...fixed, ...args], { stdio: 'inherit' });
     if (result.error) process.stderr.write(`${result.error.message}\n`);
     if (result.status !== 0) process.exit(result.status ?? 1);
   }

@@ -9,16 +9,10 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { dependencies } = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
 const imports = {};
 const input = {};
-for (const name of Object.keys(dependencies)) {
-  const manifestPath = fileURLToPath(import.meta.resolve(`${name}/package.json`));
-  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-  for (const entry of Object.keys(manifest.exports)) {
-    if (entry === './package.json') continue;
-    const specifier = name + entry.slice(1);
-    const entryName = `package-${Object.keys(input).length}`;
-    input[entryName] = fileURLToPath(import.meta.resolve(specifier));
-    imports[specifier] = `/dependencies/${entryName}.js`;
-  }
+for (const specifier of [...Object.keys(dependencies), '@agentshouse/mdruntime/memory']) {
+  const entryName = `package-${Object.keys(input).length}`;
+  input[entryName] = fileURLToPath(import.meta.resolve(specifier));
+  imports[specifier] = `/dependencies/${entryName}.js`;
 }
 const bundle = await rolldown({ input, platform: 'browser' });
 let output;

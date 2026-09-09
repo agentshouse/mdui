@@ -32,7 +32,8 @@ this service: `docker compose run --rm --build check npm run ops -- docs check`.
 
 The browser runner serves `src/index.html` and compiles requested source
 modules with swc in memory. Rolldown bundles the installed dependencies' public
-exports and their pinned dependency graph into browser ES modules in memory;
+root exports and the public Runtime memory entry with their pinned dependency
+graph into browser ES modules in memory;
 the import map resolves those entries. Playwright loads the App source
 directly with no compiled-file dependency. The browser fixture uses
 `@agentshouse/mdruntime/memory`; component specs from `components/01` onward
@@ -108,11 +109,16 @@ Tests live at public seams, never against internals, and use `.spec.ts`:
 | `test/browser/` | Playwright: the App's DOM and its public MD Runtime integration                  |
 | `test/static/`  | Vitest `static` project: the dependency-cruiser command's acceptance and refusal |
 
-The browser specifications own App loading and the field controls over the
+The browser specifications own App loading, the Markdown renderer, and field controls over the
 published in-memory Adapter. They exercise actual native interaction, value and
 validity events, same-Room reference choices, list updates, locale, visible
-focus, disabled states, and 360px light/dark layout. The pure lane permits an
-empty suite until there is independent pure behavior to protect; it does not
-import the browser entry in Node as a placeholder. Browser results, screenshots,
+focus, disabled states, and 360px light/dark layout. The renderer seam also
+accepts adversarial text directly through its public property, independently
+of Model collection validity; normal section input is read through Query.
+The pure lane qualifies the renderer dependencies against the
+[original GFM 0.29 corpus](../../test/fixtures/README.md), preserving the source's
+base/extension distinction. It is not browser safety evidence, and its current
+profile failures remain failures. No empty-suite exemption remains.
+Browser results, screenshots,
 and traces are written under `tmp/browser/`. Copy retained Assignment evidence
 to its own `tmp/` directory before another browser run replaces the results.
