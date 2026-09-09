@@ -1,6 +1,6 @@
 # 02-document-view-reading-and-the-sync-status-indicator - Document View reading and the Sync Status indicator
 
-Status: blocked
+Status: ready-for-agent
 
 ## Frame
 
@@ -49,8 +49,11 @@ synchronization time, and whether attention is required.
 
 ## Mines
 
-Waits for `runtime/04` and `runtime/07` in `agentshouse/mdruntime`, which
-deliver Sync Status and the History surface. Nothing is editable yet;
+`runtime/04` and `runtime/07` in `agentshouse/mdruntime` are merged. Their
+Sync Status and History surfaces are published in
+`@agentshouse/mdruntime@0.1.0-alpha.4`. The coordinator verified the published
+reading prerequisites under the User-delegated release authority; see the
+[acceptance receipt](../../../agents/runtime-reading-prerequisite.json). Nothing is editable yet;
 controls render read-only here and gain editing in `components/03`. The
 indicator never belongs to one Room or file. No element calls the Adapter or
 the browser store.
