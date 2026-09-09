@@ -118,7 +118,9 @@ validity events, same-Room reference choices, list updates, locale, visible
 focus, disabled states, and 360px light/dark layout. Document View covers Query
 text parts, Room-local backlinks, lazy History at the public Adapter fixture
 boundary, visible refusal reasons, Draft and Save through the public Runtime
-surfaces, structural changes, and a Conflicted or Rejected head. The indicator covers Observe states,
+surfaces, in-progress editor Draft persistence, relative reference storage,
+structural changes with whole-text, grant revocation, and a Conflicted or
+Rejected head. The indicator covers Observe states,
 attention, last completed synchronization, and Pending while unreachable.
 The renderer seam also
 accepts adversarial text directly through its public property, independently

@@ -118,6 +118,7 @@ const studio = {
     'types/project.md': projectType,
     'types/item.md': itemType,
     'people/ada.md': ada,
+    'people/bob.md': '---\ntype: person\nname: Bob\n---\n',
     'work/alpha.md': alpha,
     'work/owned.md': owned,
     'notes/plain.md': plain,
@@ -127,6 +128,7 @@ const studio = {
     'types/project.md': 'rev-project-type',
     'types/item.md': 'rev-item-type',
     'people/ada.md': 'rev-ada',
+    'people/bob.md': 'rev-bob',
     'work/alpha.md': 'rev-alpha',
     'work/owned.md': 'rev-owned',
     'notes/plain.md': 'rev-plain',
@@ -135,14 +137,26 @@ const studio = {
 
 const refusalText = 'UNIQUE_PROVIDER_REFUSAL_TEXT';
 
-async function start(page: Page, rooms: unknown[], options: { discoveryIntervalMs?: number } = {}) {
+async function start(
+  page: Page,
+  rooms: unknown[],
+  options: {
+    discoveryIntervalMs?: number;
+    providerLimits?: { name: string; value?: number }[];
+  } = {},
+) {
   await page.goto('/');
   await page.evaluate(
     async ({ rooms, options }) => {
       const { createMdRuntime } = await import('@agentshouse/mdruntime');
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const controller = new AbortController();
-      const adapter = createMemoryAdapter({ rooms: rooms as never });
+      const adapter = createMemoryAdapter({
+        rooms: rooms as never,
+        ...(options.providerLimits === undefined
+          ? {}
+          : { providerLimits: options.providerLimits as never }),
+      });
       adapter.script('mutate', { kind: 'transport-uncertainty' });
       const runtime = createMdRuntime({
         adapter,
@@ -662,4 +676,345 @@ test('list fields Save as one value and editing stays keyboard operable at 360 p
   await page.screenshot({ path: testInfo.outputPath('editing-360-light.png'), fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.screenshot({ path: testInfo.outputPath('editing-360-dark.png'), fullPage: true });
+});
+
+test('unsaved section textarea persists in the Runtime Draft across remount', async ({ page }) => {
+  await start(page, [studio]);
+  await mount(page, 'work/alpha.md');
+  await page
+    .getByRole('region', { name: 'Extra' })
+    .getByRole('button', { name: 'Edit Extra' })
+    .click();
+  await page
+    .getByRole('region', { name: 'Extra' })
+    .getByRole('textbox', { name: 'Extra' })
+    .fill('Unsaved extra body');
+  await expect
+    .poll(async () => draftOf(page, 'work/alpha.md'))
+    .toMatchObject({ sections: { Extra: 'Unsaved extra body' } });
+  expect(await queueOf(page)).toEqual([]);
+  await mount(page, 'work/alpha.md');
+  await expect(page.getByRole('region', { name: 'Extra' })).toContainText('Unsaved extra body');
+  expect(await draftOf(page, 'work/alpha.md')).toMatchObject({
+    sections: { Extra: 'Unsaved extra body' },
+  });
+});
+
+test('switching section editors keeps each part and does not copy the previous textarea', async ({
+  page,
+}) => {
+  await start(page, [studio]);
+  await mount(page, 'work/alpha.md');
+  const before = await queried(page, 'work/alpha.md');
+  await page
+    .getByRole('region', { name: 'Extra' })
+    .getByRole('button', { name: 'Edit Extra' })
+    .click();
+  await page
+    .getByRole('region', { name: 'Extra' })
+    .getByRole('textbox', { name: 'Extra' })
+    .fill('Extra in progress');
+  await page
+    .getByRole('region', { name: 'Summary' })
+    .getByRole('button', { name: 'Edit Summary' })
+    .click();
+  await expect(
+    page.getByRole('region', { name: 'Summary' }).getByRole('textbox', { name: 'Summary' }),
+  ).toHaveValue(before.sections.Summary);
+  await expect
+    .poll(async () => draftOf(page, 'work/alpha.md'))
+    .toMatchObject({ sections: { Extra: 'Extra in progress' } });
+  const draft = (await draftOf(page, 'work/alpha.md')) as { sections?: Record<string, string> };
+  expect(draft.sections?.Summary).toBeUndefined();
+});
+
+test('a reference field Save stores the Path relative to the file', async ({ page }) => {
+  await start(page, [studio]);
+  await mount(page, 'work/alpha.md');
+  await page.getByRole('combobox', { name: 'owner', exact: true }).selectOption('people/bob.md');
+  await documentSave(page).click();
+  await expect.poll(async () => (await queueOf(page)).length).toBe(1);
+  expect((await queueOf(page))[0].changes).toEqual([
+    { kind: 'field', path: 'work/alpha.md', name: 'owner', value: '../people/bob.md' },
+  ]);
+});
+
+test('Conflicted marks only Provider-changed parts including ones the App Creator did not edit', async ({
+  page,
+}) => {
+  await start(page, [studio], { discoveryIntervalMs: 80 });
+  await page.evaluate(
+    ({ text, content }) => {
+      window.viewFixture.adapter.script('mutate', {
+        kind: 'conflicted' as const,
+        roomVersion: 'v2',
+        affected: { 'work/alpha.md': content },
+        text,
+      });
+    },
+    { text: refusalText, content: providerAlpha },
+  );
+  await mount(page, 'work/alpha.md');
+  await page.getByRole('textbox', { name: 'title', exact: true }).fill('App Creator title');
+  await page.getByRole('textbox', { name: 'title', exact: true }).blur();
+  await documentSave(page).click();
+  await expect.poll(async () => (await queueOf(page))[0]?.kind).toBe('conflicted');
+  await page.evaluate(
+    (room) => {
+      window.viewFixture.adapter.setRooms([room as never]);
+    },
+    {
+      ...studio,
+      roomVersion: 'v2',
+      documents: { ...studio.documents, 'work/alpha.md': providerAlpha },
+    },
+  );
+  await expect
+    .poll(async () => (await queried(page, 'work/alpha.md')).fields.title)
+    .toBe('Provider title');
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue(
+    'App Creator title',
+  );
+  await expect(
+    page.getByRole('region', { name: 'Fields' }).getByText('Current value: Provider title'),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Summary' }).getByText('Current value:', { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Preamble' }).getByText('Current value:', { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Extra' }).getByText('Current value:', { exact: false }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('region', { name: 'Steps' }).getByText('Current value:', { exact: false }),
+  ).toHaveCount(0);
+});
+
+test('revoking the write grant while a section editor is open removes editing controls', async ({
+  page,
+}) => {
+  await start(page, [studio], { discoveryIntervalMs: 80 });
+  await mount(page, 'work/alpha.md');
+  await page
+    .getByRole('region', { name: 'Extra' })
+    .getByRole('button', { name: 'Edit Extra' })
+    .click();
+  await expect(
+    page.getByRole('region', { name: 'Extra' }).getByRole('textbox', { name: 'Extra' }),
+  ).toBeVisible();
+  await page.evaluate(
+    (room) => {
+      window.viewFixture.adapter.setRooms([room as never]);
+    },
+    { ...studio, writeGrants: ['./people'] },
+  );
+  await expect
+    .poll(async () => page.getByText('This Path has no write grant.', { exact: true }).count())
+    .toBe(1);
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Edit/ })).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Extra' })).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toBeDisabled();
+});
+
+test('whole-text Save includes a pending rename as a move', async ({ page }) => {
+  await start(page, [studio]);
+  await mount(page, 'work/alpha.md');
+  const replacement = `---
+type: project
+title: Rewritten
+---
+
+Whole file body.
+`;
+  await page.getByRole('textbox', { name: 'Rename', exact: true }).fill('work/rewritten.md');
+  await page.getByRole('textbox', { name: 'Rename', exact: true }).blur();
+  await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
+  await page.getByRole('region', { name: 'Whole text' }).getByRole('textbox').fill(replacement);
+  await page
+    .getByRole('region', { name: 'Whole text' })
+    .getByRole('button', { name: 'Save Whole text' })
+    .click();
+  await documentSave(page).click();
+  await expect.poll(async () => (await queueOf(page)).length).toBe(1);
+  expect((await queueOf(page))[0].changes).toEqual([
+    { kind: 'replace', path: 'work/alpha.md', content: replacement },
+    { kind: 'move', path: 'work/alpha.md', to: 'work/rewritten.md' },
+  ]);
+});
+
+test('a section named Preamble Saves as replace-section not preamble', async ({ page }) => {
+  const named = `---
+type: project
+title: Named
+---
+
+Document preamble text.
+
+## Preamble
+
+This is a section named Preamble.
+`;
+  await start(page, [
+    {
+      ...studio,
+      documents: { ...studio.documents, 'work/named.md': named },
+      revisions: { ...studio.revisions, 'work/named.md': 'rev-named' },
+    },
+  ]);
+  await mount(page, 'work/named.md');
+  const before = await queried(page, 'work/named.md');
+  expect(before.preamble).toContain('Document preamble text.');
+  expect(before.sections.Preamble).toContain('This is a section named Preamble.');
+  await page
+    .getByRole('region', { name: 'Preamble' })
+    .nth(1)
+    .getByRole('button', { name: 'Edit Preamble' })
+    .click();
+  const sectionEditor = page
+    .getByRole('region', { name: 'Preamble' })
+    .nth(1)
+    .getByRole('textbox', { name: 'Preamble' });
+  await expect(sectionEditor).toHaveValue(before.sections.Preamble);
+  await sectionEditor.fill('Replacement section named Preamble');
+  await page
+    .getByRole('region', { name: 'Preamble' })
+    .nth(1)
+    .getByRole('button', { name: 'Save Preamble' })
+    .click();
+  await documentSave(page).click();
+  await expect.poll(async () => (await queueOf(page)).length).toBe(1);
+  const [batch] = await queueOf(page);
+  expect(batch.changes).toEqual([
+    {
+      kind: 'section',
+      path: 'work/named.md',
+      name: 'Preamble',
+      value: 'Replacement section named Preamble',
+    },
+  ]);
+  expect(batch.preconditions).toEqual([
+    { kind: 'section', path: 'work/named.md', name: 'Preamble', value: before.sections.Preamble },
+  ]);
+});
+
+test('a document-size Provider limit names the rule on the Document when no part matches', async ({
+  page,
+}) => {
+  await start(page, [studio], { providerLimits: [{ name: 'document-size', value: 1 }] });
+  await mount(page, 'work/alpha.md');
+  await page.getByRole('textbox', { name: 'title', exact: true }).fill('Too large');
+  await page.getByRole('textbox', { name: 'title', exact: true }).blur();
+  await documentSave(page).click();
+  await expect(
+    page.getByRole('region', { name: 'Document' }).getByText('provider-limit', { exact: true }),
+  ).toBeVisible();
+  expect(await queueOf(page)).toEqual([]);
+  expect(await draftOf(page, 'work/alpha.md')).toMatchObject({ fields: { title: 'Too large' } });
+});
+
+test('a newer Draft keeps its values and restores refused parts it does not already carry', async ({
+  page,
+}) => {
+  await start(page, [studio], { discoveryIntervalMs: 80 });
+  await page.evaluate(
+    ({ text, content }) => {
+      window.viewFixture.adapter.script('mutate', {
+        kind: 'conflicted' as const,
+        roomVersion: 'v2',
+        affected: { 'work/alpha.md': content },
+        text,
+      });
+    },
+    { text: refusalText, content: providerAlpha },
+  );
+  await mount(page, 'work/alpha.md');
+  await page.getByRole('textbox', { name: 'title', exact: true }).fill('Refused title');
+  await page.getByRole('textbox', { name: 'title', exact: true }).blur();
+  await documentSave(page).click();
+  await expect.poll(async () => (await queueOf(page))[0]?.kind).toBe('conflicted');
+  await expect
+    .poll(async () => draftOf(page, 'work/alpha.md'))
+    .toMatchObject({ fields: { title: 'Refused title' } });
+  await page.evaluate(async () => {
+    await window.viewFixture.runtime.draft.replace('studio', 'work/alpha.md', {
+      sections: { Extra: 'Newer extra' },
+    });
+  });
+  await mount(page, 'work/alpha.md');
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue(
+    'Refused title',
+  );
+  await expect(page.getByRole('region', { name: 'Extra' })).toContainText('Newer extra');
+  expect(await draftOf(page, 'work/alpha.md')).toMatchObject({
+    fields: { title: 'Refused title' },
+    sections: { Extra: 'Newer extra' },
+  });
+});
+
+test('an untyped whole-text Draft is restored instead of the current preamble', async ({
+  page,
+}) => {
+  await start(page, [{ ...studio, writeGrants: ['./work', './people', './notes'] }]);
+  await mount(page, 'notes/plain.md');
+  await page
+    .getByRole('region', { name: 'Document' })
+    .nth(1)
+    .getByRole('button', { name: 'Edit Document' })
+    .click();
+  await page
+    .getByRole('region', { name: 'Document' })
+    .nth(1)
+    .getByRole('textbox', { name: 'Document' })
+    .fill('Rewritten untyped whole');
+  await page
+    .getByRole('region', { name: 'Document' })
+    .nth(1)
+    .getByRole('button', { name: 'Save Document' })
+    .click();
+  await expect
+    .poll(async () => draftOf(page, 'notes/plain.md'))
+    .toMatchObject({ whole: 'Rewritten untyped whole' });
+  await mount(page, 'notes/plain.md');
+  await expect(page.getByRole('region', { name: 'Document' }).nth(1)).toContainText(
+    'Rewritten untyped whole',
+  );
+  await page
+    .getByRole('region', { name: 'Document' })
+    .nth(1)
+    .getByRole('button', { name: 'Edit Document' })
+    .click();
+  await expect(
+    page
+      .getByRole('region', { name: 'Document' })
+      .nth(1)
+      .getByRole('textbox', { name: 'Document' }),
+  ).toHaveValue('Rewritten untyped whole');
+});
+
+test('a refused removal does not keep remove in the Draft over a later field Save', async ({
+  page,
+}) => {
+  await start(page, [studio]);
+  await mount(page, 'people/ada.md');
+  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(page.getByText('referenced-missing-file', { exact: true })).toBeVisible();
+  await page.getByRole('textbox', { name: 'name', exact: true }).fill('Ada Lovelace');
+  await page.getByRole('textbox', { name: 'name', exact: true }).blur();
+  await documentSave(page).click();
+  await expect.poll(async () => (await queueOf(page)).length).toBe(1);
+  expect((await queueOf(page))[0].changes).toEqual([
+    { kind: 'field', path: 'people/ada.md', name: 'name', value: 'Ada Lovelace' },
+  ]);
+});
+
+test('whole-text editor opens the complete Markdown from Query', async ({ page }) => {
+  await start(page, [studio]);
+  await mount(page, 'work/alpha.md');
+  await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Whole text' }).getByRole('textbox')).toHaveValue(
+    alpha,
+  );
 });

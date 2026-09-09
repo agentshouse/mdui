@@ -185,7 +185,9 @@ continues.
 
 When the Path has a write grant and is not Provider-owned, field controls are
 enabled and section, preamble, and whole-text editors write only through
-`runtime.draft`. File Save calls `runtime.save` with structured changes from
+`runtime.draft`, including in-progress textarea text. A whole-text editor opens
+`draft.whole` or the public Query document's complete Markdown when that result
+carries `content`. File Save calls `runtime.save` with structured changes from
 that Draft. `create` writes a typed create Draft at an absent Path. Rename,
 move, and removal are controls of the same Save. A missing write grant or a
 Provider-owned Path shows the reason, keeps field controls disabled, and

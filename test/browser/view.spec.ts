@@ -221,7 +221,7 @@ test('renders typed fields, preamble, declared extra and structured sections fro
   await expect(page.getByRole('textbox', { name: 'tags 2', exact: true })).toHaveValue('ui');
   for (const input of await page
     .locator('md-document-view')
-    .locator('.fields')
+    .getByRole('region', { name: 'Fields' })
     .locator('input, textarea, select')
     .all())
     await expect(input).toBeEnabled();

@@ -10,7 +10,7 @@ import type {
   SaveRefusal,
 } from '@agentshouse/mdruntime';
 import { type FieldControl, type FieldDefinition } from './fields.js';
-import { internalPath } from './links.js';
+import { internalPath, relativePath } from './links.js';
 import './fields.js';
 import './markdown.js';
 import { viewStyles } from './theme.js';
@@ -31,6 +31,7 @@ type Editor = {
   part: 'preamble' | 'section' | 'whole';
   name: string;
   opened: string;
+  live: string;
 };
 
 const ROOM_ROOT = 'room';
@@ -67,6 +68,53 @@ function fieldValue(path: string, spec: FieldDefinition, value: unknown): unknow
     );
   }
   return value;
+}
+
+function storedField(path: string, spec: FieldDefinition, value: unknown): unknown {
+  if (spec.kind === 'reference' && typeof value === 'string') return relativePath(path, value);
+  if (spec.kind === 'list' && spec.of === 'reference' && Array.isArray(value)) {
+    return value.map((entry) => (typeof entry === 'string' ? relativePath(path, entry) : entry));
+  }
+  return value;
+}
+
+function draftEmpty(draft: FileDraft): boolean {
+  return (
+    draft.fields === undefined &&
+    draft.sections === undefined &&
+    draft.preamble === undefined &&
+    draft.whole === undefined &&
+    draft.create === undefined &&
+    draft.moveTo === undefined &&
+    draft.remove !== true
+  );
+}
+
+function overlayDraft(base: FileDraft, newer: FileDraft): FileDraft {
+  if (newer.whole !== undefined) return { ...newer };
+  return {
+    ...base,
+    ...newer,
+    fields:
+      base.fields === undefined && newer.fields === undefined
+        ? undefined
+        : { ...base.fields, ...newer.fields },
+    sections:
+      base.sections === undefined && newer.sections === undefined
+        ? undefined
+        : { ...base.sections, ...newer.sections },
+    preamble: newer.preamble ?? base.preamble,
+    whole: newer.whole ?? base.whole,
+    create: newer.create ?? base.create,
+    moveTo: newer.moveTo ?? base.moveTo,
+    remove: newer.remove ?? base.remove,
+  };
+}
+
+function queryMarkdown(file: QueryDocument | undefined): string | undefined {
+  if (file === undefined || !('content' in file)) return;
+  const content = (file as QueryDocument & { content?: unknown }).content;
+  return typeof content === 'string' ? content : undefined;
 }
 
 function refusal(room: AppRoom | undefined, path: string): string {
@@ -184,6 +232,7 @@ export class DocumentView extends HTMLElement {
   private localRefusal: SaveRefusal | undefined;
   private queue: readonly QueueEntry[] = [];
   private restoredHead: string | undefined;
+  private conflictBaseline: QueryDocument | undefined;
   private writeChain: Promise<void> = Promise.resolve();
   private readonly root = this.attachShadow({ mode: 'open' });
 
@@ -250,6 +299,7 @@ export class DocumentView extends HTMLElement {
     this.editor = undefined;
     this.localRefusal = undefined;
     this.restoredHead = undefined;
+    this.conflictBaseline = undefined;
   }
 
   private roomName(): string {
@@ -318,9 +368,10 @@ export class DocumentView extends HTMLElement {
     const head = this.refusedHead();
     if (head === undefined || this.runtime === undefined) return;
     if (this.restoredHead === head.batch.id) return;
-    if (this.draft !== null) return;
     this.restoredHead = head.batch.id;
-    await this.keepDraft(draftFromChanges(head.batch.changes, this.filePath()));
+    const refused = draftFromChanges(head.batch.changes, this.filePath());
+    const next = this.draft === null ? refused : overlayDraft(refused, this.draft);
+    await this.keepDraft(next);
     this.present();
   }
 
@@ -373,6 +424,25 @@ export class DocumentView extends HTMLElement {
     return this.draft?.preamble ?? this.current?.preamble ?? '';
   }
 
+  private displayedWhole(): string {
+    if (this.draft?.whole !== undefined) return this.draft.whole;
+    const content = queryMarkdown(this.current);
+    if (content !== undefined) return content;
+    if (this.current?.type === 'any') return this.displayedPreamble();
+    return '';
+  }
+
+  private refusalUnplaced(): boolean {
+    if (this.localRefusal === undefined) return false;
+    const location = this.localRefusal.location;
+    if (location === undefined) return true;
+    if (location === 'preamble') return false;
+    if (this.definition()?.fields[location] !== undefined) return false;
+    if (this.current?.sections[location] !== undefined) return false;
+    if (this.draft?.sections !== undefined && location in this.draft.sections) return false;
+    return true;
+  }
+
   private marks(): Map<string, unknown> {
     const marks = new Map<string, unknown>();
     const file = this.current;
@@ -387,25 +457,42 @@ export class DocumentView extends HTMLElement {
         priors.set(`section:${precondition.name}`, precondition.value);
       if (precondition.kind === 'preamble') priors.set('preamble', precondition.value);
     }
-    const note = (key: string, current: unknown, prior: unknown, intended: unknown) => {
-      if (prior !== undefined && !equal(current, prior)) {
-        marks.set(key, current);
-        return;
-      }
-      if (intended !== undefined && !equal(current, intended)) marks.set(key, current);
+    const baseline = this.conflictBaseline;
+    const priorOf = (key: string, fromBaseline: unknown) => {
+      if (priors.has(key)) return priors.get(key);
+      if (baseline !== undefined) return fromBaseline;
     };
-    for (const [name, value] of Object.entries(file.fields)) {
-      note(`field:${name}`, value, priors.get(`field:${name}`), this.draft?.fields?.[name]);
+    const note = (key: string, current: unknown, prior: unknown) => {
+      if (prior !== undefined && !equal(current, prior)) marks.set(key, current);
+    };
+    const fieldNames = new Set([
+      ...Object.keys(file.fields),
+      ...Object.keys(baseline?.fields ?? {}),
+    ]);
+    for (const name of fieldNames) {
+      note(`field:${name}`, file.fields[name], priorOf(`field:${name}`, baseline?.fields[name]));
     }
-    for (const [name, value] of Object.entries(file.sections)) {
-      note(`section:${name}`, value, priors.get(`section:${name}`), this.draft?.sections?.[name]);
+    const sectionNames = new Set([
+      ...Object.keys(file.sections),
+      ...Object.keys(baseline?.sections ?? {}),
+    ]);
+    for (const name of sectionNames) {
+      note(
+        `section:${name}`,
+        file.sections[name],
+        priorOf(`section:${name}`, baseline?.sections[name]),
+      );
     }
-    note('preamble', file.preamble, priors.get('preamble'), this.draft?.preamble);
+    note('preamble', file.preamble, priorOf('preamble', baseline?.preamble));
     return marks;
   }
 
   private present(): void {
-    const live = this.root.querySelector('textarea');
+    if (!this.writable() && this.editor !== undefined) {
+      const next = this.applyEditor(cloneDraft(this.draft), this.editor, this.editor.live);
+      this.editor = undefined;
+      void this.keepDraft(draftEmpty(next) ? null : next);
+    }
     const style = document.createElement('style');
     style.textContent = viewStyles;
     const heading = document.createElement('h1');
@@ -422,10 +509,6 @@ export class DocumentView extends HTMLElement {
     else if (this.draft?.create !== undefined && this.runtime !== undefined)
       this.renderCreation(body);
     this.root.replaceChildren(style, heading, reason, body);
-    if (this.editor !== undefined && live instanceof HTMLTextAreaElement) {
-      const next = this.root.querySelector('textarea');
-      if (next instanceof HTMLTextAreaElement) next.value = live.value;
-    }
   }
 
   private documentControls(): HTMLElement {
@@ -436,7 +519,7 @@ export class DocumentView extends HTMLElement {
     const head = this.refusedHead();
     if (head !== undefined && 'text' in head.outcome)
       panel.append(message('refusal', head.outcome.text));
-    if (this.localRefusal !== undefined && this.localRefusal.location === undefined) {
+    if (this.localRefusal !== undefined && this.refusalUnplaced()) {
       panel.append(message('error', this.localRefusal.rule));
       if (this.localRefusal.referrers !== undefined)
         panel.append(this.referrers(this.localRefusal.referrers));
@@ -478,7 +561,7 @@ export class DocumentView extends HTMLElement {
     if (this.current !== undefined && this.current.type !== 'any') {
       const whole = button('Edit whole text');
       whole.addEventListener('click', () => {
-        this.openEditor('whole', 'Whole text', this.draft?.whole ?? '');
+        this.openEditor('whole', 'Whole text', this.displayedWhole());
       });
       actions.append(whole);
     }
@@ -525,13 +608,13 @@ export class DocumentView extends HTMLElement {
     const room = file.room;
     const definition = runtime.types(room).find((entry) => entry.name === file.type);
     if (this.editor?.part === 'whole') {
-      body.append(this.textPart('Whole text', this.editor.opened, true, 'whole'));
+      body.append(this.textPart(this.editor.name, this.editor.live, true, 'whole'));
       return;
     }
     if (file.type === 'any') {
-      if (this.writable())
-        body.append(this.textPart('Document', this.displayedPreamble(), true, 'whole'));
-      else body.append(this.markdown('Document', file.preamble));
+      const text = this.displayedWhole();
+      if (this.writable()) body.append(this.textPart('Document', text, true, 'whole'));
+      else body.append(this.markdown('Document', text));
     } else {
       if (definition !== undefined) body.append(this.fields(definition));
       body.append(this.textPart('Preamble', this.displayedPreamble(), this.writable(), 'preamble'));
@@ -590,7 +673,7 @@ export class DocumentView extends HTMLElement {
     name: string,
     text: string,
     editable: boolean,
-    kind: Editor['part'] = name === 'Preamble' ? 'preamble' : 'section',
+    kind: Editor['part'] = 'section',
   ): HTMLElement {
     const section = this.section(name);
     const editing =
@@ -600,7 +683,12 @@ export class DocumentView extends HTMLElement {
     if (editing) {
       const area = document.createElement('textarea');
       area.setAttribute('aria-label', name);
-      area.value = this.root.querySelector('textarea')?.value ?? this.editor!.opened;
+      area.value = this.editor!.live;
+      area.addEventListener('input', () => {
+        if (this.editor === undefined) return;
+        this.editor.live = area.value;
+        void this.persistEditor();
+      });
       const actions = document.createElement('div');
       actions.className = 'actions';
       const save = button('Save', `Save ${name}`);
@@ -614,8 +702,7 @@ export class DocumentView extends HTMLElement {
       actions.append(save, cancel);
       section.append(area, actions);
     } else {
-      if (kind !== 'whole') section.append(this.markdown(name, text));
-      else section.append(this.markdown(name, text));
+      section.append(this.markdown(name, text));
       if (editable) {
         const edit = button('Edit', `Edit ${name}`);
         edit.addEventListener('click', () => {
@@ -632,23 +719,44 @@ export class DocumentView extends HTMLElement {
     return section;
   }
 
+  private applyEditor(draft: FileDraft, editor: Editor, text: string): FileDraft {
+    if (editor.part === 'whole') {
+      draft.whole = text;
+      delete draft.fields;
+      delete draft.sections;
+      delete draft.preamble;
+      return draft;
+    }
+    if (editor.part === 'preamble') {
+      draft.preamble = text;
+      return draft;
+    }
+    draft.sections = { ...draft.sections, [editor.name]: text };
+    return draft;
+  }
+
   private openEditor(part: Editor['part'], name: string, opened: string): void {
-    this.editor = { part, name, opened };
+    if (this.editor !== undefined) {
+      const previous = this.editor;
+      const retained = this.applyEditor(cloneDraft(this.draft), previous, previous.live);
+      this.draft = retained;
+      void this.keepDraft(retained);
+    }
+    this.editor = { part, name, opened, live: opened };
     this.present();
     this.root.querySelector('textarea')?.focus();
   }
 
+  private persistEditor(): Promise<void> {
+    if (this.editor === undefined) return Promise.resolve();
+    const next = this.applyEditor(cloneDraft(this.draft), this.editor, this.editor.live);
+    return this.keepDraft(next);
+  }
+
   private async commitEditor(value?: string): Promise<void> {
     if (this.editor === undefined) return;
-    const text = value ?? this.root.querySelector('textarea')?.value ?? this.editor.opened;
-    const next = cloneDraft(this.draft);
-    if (this.editor.part === 'whole') {
-      next.whole = text;
-      delete next.fields;
-      delete next.sections;
-      delete next.preamble;
-    } else if (this.editor.part === 'preamble') next.preamble = text;
-    else next.sections = { ...next.sections, [this.editor.name]: text };
+    const text = value ?? this.editor.live;
+    const next = this.applyEditor(cloneDraft(this.draft), this.editor, text);
     this.editor = undefined;
     await this.keepDraft(next);
     this.present();
@@ -673,27 +781,14 @@ export class DocumentView extends HTMLElement {
       }
     } else next.sections = { ...next.sections, [name]: opened };
     this.editor = undefined;
-    const empty =
-      next.fields === undefined &&
-      next.sections === undefined &&
-      next.preamble === undefined &&
-      next.whole === undefined &&
-      next.create === undefined &&
-      next.moveTo === undefined &&
-      next.remove !== true;
-    await this.keepDraft(empty ? null : next);
+    await this.keepDraft(draftEmpty(next) ? null : next);
     this.present();
   }
 
   private async changeField(name: string, value: unknown): Promise<void> {
     const spec = asField(this.definition()?.fields[name]);
-    const previous =
-      this.current === undefined
-        ? undefined
-        : spec === undefined
-          ? this.current.fields[name]
-          : fieldValue(this.filePath(), spec, this.current.fields[name]);
-    const intended = spec === undefined ? value : fieldValue(this.filePath(), spec, value);
+    const previous = this.current?.fields[name];
+    const intended = spec === undefined ? value : storedField(this.filePath(), spec, value);
     const next = cloneDraft(this.draft);
     delete next.whole;
     if (equal(previous, intended)) {
@@ -701,18 +796,10 @@ export class DocumentView extends HTMLElement {
         delete next.fields[name];
         if (Object.keys(next.fields).length === 0) delete next.fields;
       }
-      const empty =
-        next.fields === undefined &&
-        next.sections === undefined &&
-        next.preamble === undefined &&
-        next.whole === undefined &&
-        next.create === undefined &&
-        next.moveTo === undefined &&
-        next.remove !== true;
-      await this.keepDraft(empty ? null : next);
+      await this.keepDraft(draftEmpty(next) ? null : next);
       return;
     }
-    next.fields = { ...next.fields, [name]: value };
+    next.fields = { ...next.fields, [name]: intended };
     await this.keepDraft(next);
   }
 
@@ -730,19 +817,17 @@ export class DocumentView extends HTMLElement {
       }
       return [{ kind: 'create', path, fields, sections }];
     }
-    if (draft.whole !== undefined) return [{ kind: 'replace', path: source, content: draft.whole }];
+    if (draft.whole !== undefined) {
+      const changes: Change[] = [{ kind: 'replace', path: source, content: draft.whole }];
+      if (draft.moveTo !== undefined && draft.moveTo !== source)
+        changes.push({ kind: 'move', path: source, to: draft.moveTo });
+      return changes;
+    }
     const changes: Change[] = [];
     const file = this.current;
-    const definition = this.definition();
     for (const [name, value] of Object.entries(draft.fields ?? {})) {
-      const spec = asField(definition?.fields[name]);
-      const previous =
-        file === undefined || spec === undefined
-          ? file?.fields[name]
-          : fieldValue(source, spec, file.fields[name]);
-      const intended = spec === undefined ? value : fieldValue(source, spec, value);
-      if (!equal(previous, intended))
-        changes.push({ kind: 'field', path: source, name, value: intended });
+      const previous = file?.fields[name];
+      if (!equal(previous, value)) changes.push({ kind: 'field', path: source, name, value });
     }
     for (const [name, value] of Object.entries(draft.sections ?? {})) {
       if (file?.sections[name] === value) continue;
@@ -763,6 +848,7 @@ export class DocumentView extends HTMLElement {
     const changes = this.changesFromDraft();
     const head = this.refusedHead();
     const snapshot = this.draft;
+    this.conflictBaseline = this.current;
     this.draft = null;
     const result = await this.runtime.save(
       this.roomName(),
@@ -770,7 +856,11 @@ export class DocumentView extends HTMLElement {
       head === undefined ? undefined : head.batch.id,
     );
     if (result.outcome === 'refused') {
-      this.draft = snapshot;
+      const retained = cloneDraft(snapshot);
+      delete retained.remove;
+      this.draft = draftEmpty(retained) ? null : retained;
+      if (this.draft === null) await this.keepDraft(null);
+      else await this.keepDraft(this.draft);
       this.localRefusal = result;
       this.present();
       return;
@@ -778,7 +868,12 @@ export class DocumentView extends HTMLElement {
     this.localRefusal = undefined;
     this.editor = undefined;
     this.draft = asDraft(this.runtime.draft.read(this.roomName(), this.filePath()));
-    if (moved !== undefined && moved !== this.filePath()) this.setAttribute('path', moved);
+    if (
+      moved !== undefined &&
+      moved !== this.filePath() &&
+      changes.some((change) => change.kind === 'move')
+    )
+      this.setAttribute('path', moved);
     this.present();
   }
 
@@ -794,6 +889,7 @@ export class DocumentView extends HTMLElement {
     await this.runtime.queue.discard(this.roomName(), identifier);
     await this.keepDraft(null);
     this.restoredHead = undefined;
+    this.conflictBaseline = undefined;
     this.present();
   }
 
