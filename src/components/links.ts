@@ -3,6 +3,40 @@ export interface PathDestination {
   fragment?: string;
 }
 
+const externalSchemes = new Set([
+  'http:',
+  'https:',
+  'bitcoin:',
+  'ftp:',
+  'ftps:',
+  'geo:',
+  'im:',
+  'irc:',
+  'ircs:',
+  'magnet:',
+  'mailto:',
+  'matrix:',
+  'mms:',
+  'news:',
+  'nntp:',
+  'openpgp4fpr:',
+  'sftp:',
+  'sip:',
+  'sms:',
+  'smsto:',
+  'ssh:',
+  'tel:',
+  'urn:',
+  'webcal:',
+  'wtai:',
+  'xmpp:',
+]);
+
+function externalLink(destination: string): boolean {
+  const url = URL.parse(destination.startsWith('//') ? `https:${destination}` : destination);
+  return url !== null && (externalSchemes.has(url.protocol) || /^web\+[a-z]+:$/.test(url.protocol));
+}
+
 function internalPath(destination: string, currentPath: string): PathDestination | undefined {
   if (!destination || !currentPath || /[\\\u0000-\u0020]/.test(destination)) return;
   const hash = destination.indexOf('#');
@@ -42,7 +76,7 @@ export function connectLinks(
 ): void {
   for (const link of container.querySelectorAll('a')) {
     const destination = link.getAttribute('href') ?? '';
-    if (/^(?:https?:|ftp:|mailto:|ircs?:|xmpp:|\/\/)/i.test(destination)) {
+    if (externalLink(destination)) {
       link.rel = 'noopener noreferrer';
       continue;
     }

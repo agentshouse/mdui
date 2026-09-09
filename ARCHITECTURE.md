@@ -21,14 +21,9 @@ documentation, and merge commands together with checks and formatting.
 The check runner checks source imports with dependency-cruiser and runs the
 three public test seams documented in [`TESTING.md`](docs/agents/TESTING.md).
 
-The browser lane's local host serves the App source. It transforms TypeScript
-on request and uses Rolldown to bundle the installed packages' public root
-exports and the public `@agentshouse/mdruntime/memory` fixture entry, with
-their pinned dependencies, in memory. It also maps the public roots of the
-locked micromark construct, character, and URI utilities used by the profile
-extensions. Its browser specification reads
-Types and Query through the published MD Runtime's public in-memory Adapter.
-This host is check tooling, and no server or bundle is shipped by the workspace.
+The browser lane's local host is check tooling; no server or bundle is shipped
+by the workspace. Its compilation and published dependency integration are
+documented in [TESTING.md](docs/agents/TESTING.md#runner).
 
 The chosen composition is owned by MD Runtime's
 [PRD-0005](https://github.com/agentshouse/mdruntime/blob/main/docs/prd/prd-0005-shipped-form-and-release.md)
@@ -49,8 +44,8 @@ through the public Runtime and supplies it to the renderer.
 
 The profile configuration disables single-tilde deletion and footnote constructs.
 It adds no frontmatter, math, directives, MD Type validation, or Change logic.
-The [original GFM 0.29 fixtures](test/fixtures/README.md) qualify the selected
-dependency graph and profile integration against all 673 original examples.
+The [original GFM 0.29 fixtures](test/fixtures/README.md) retain profile provenance;
+[TESTING.md](docs/agents/TESTING.md#location-and-naming) owns their qualification seam.
 Two [supported micromark syntax extensions](https://github.com/micromark/micromark#extending-markdown)
 restore the pinned profile's FTP literals and historical inline-comment rule.
 The comment extension checks that rule with the token stream's lookahead API
@@ -86,17 +81,17 @@ Relative links resolve against the supplied current Document directory. A
 keyboard or pointer activation emits bubbling, composed `open-path` with
 `{ room, path, fragment? }` and prevents document navigation. Decoded traversal
 above the Room root, malformed encodings, unsafe schemes, and links without
-the required host context remain text. Supported external links retain ordinary
-anchor behavior. No Room lookup or extra shared state is created by the renderer.
+the required host context remain text. External destinations are parsed by the
+browser URL API. HTTP(S), the HTML standard's
+[safelisted schemes and `web+` handlers](https://html.spec.whatwg.org/multipage/system-state.html#safelisted-scheme)
+retain ordinary anchor behavior, including telephone, messaging, and calendar
+links. Executable, local-file, embedded-document, and unrecognized schemes are
+not admitted. No Room lookup or extra shared state is created by the renderer.
 
 The renderer uses the same theme properties as the fields, with `--md-link`
 for link color. Browser preference supplies light/dark defaults. Code blocks
-and tables have labelled, keyboard-focusable scroll regions; long text wraps
-inside a 360px viewport. The browser tests cover published Query section input
-and direct adversarial input at the public `text` property, including network
-interception, disclosure focus, internal Path events, CSS overrides, and both
-viewport sizes. Invalid collection fixtures are not needed to exercise the
-renderer, whose public text input is independent of Runtime validation.
+and tables have labelled, keyboard-focusable scroll regions; long text wraps.
+See [TESTING.md](docs/agents/TESTING.md#location-and-naming) for browser acceptance.
 
 ## Field controls
 
@@ -155,5 +150,5 @@ list items places focus on the next usable control.
 Number and date displays use the browser locale. Dates retain their ISO value
 without a local-timezone shift. App CSS may set `--md-color-scheme`,
 `--md-background`, `--md-surface`, `--md-text`, `--md-border`, `--md-focus`, and
-`--md-error` on a containing element. The browser seam exercises these overrides,
-visible keyboard focus, disabled controls, and both themes at a 360px viewport.
+`--md-error` on a containing element. Browser acceptance is owned by
+[TESTING.md](docs/agents/TESTING.md#location-and-naming).

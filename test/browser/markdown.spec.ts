@@ -10,6 +10,7 @@ declare global {
       stop: () => void;
       paths: unknown[];
       resources: unknown[];
+      external: { destination: string | null; prevented: boolean }[];
     };
   }
 }
@@ -41,7 +42,13 @@ test.beforeEach(async ({ page }) => {
       requiredGuarantees: [],
       signal: controller.signal,
     });
-    window.markdownFixture = { runtime, stop: () => controller.abort(), paths: [], resources: [] };
+    window.markdownFixture = {
+      runtime,
+      stop: () => controller.abort(),
+      paths: [],
+      resources: [],
+      external: [],
+    };
     await new Promise<void>((resolve) =>
       runtime.observe('rooms', (rooms) => {
         if (rooms.some((room) => room.roomVersion === 'v1')) resolve();
@@ -226,6 +233,65 @@ test('reports normalized same-Room Paths through keyboard and pointer activation
     path: 'elsewhere/next.md',
     fragment: 'part',
   });
+});
+
+test('preserves ordinary external protocol links without authorizing unsafe URLs or resources', async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  await page.route('**/*', (route) => {
+    requests.push(route.request().url());
+    return route.abort();
+  });
+  const element = await render(
+    page,
+    '[Call](tel:+15551234) [Message](sms:+15551234) [Location](geo:50.45,30.52) [Calendar](webcal://example.com/calendar) [Handler](web+notes:shared) [Uppercase](TEL:+15555678)\n\n[Script](javascript:alert%281%29) [Encoded](java&#x73;cript:alert%281%29) [Control](java&#x09;script:alert%281%29) [Data](data:text/html,hello) [Blob](blob:https://example.com/id) [Local](file:///etc/passwd) [Filesystem](filesystem:https://example.com/temporary/file) [About](about:blank) [VBScript](vbscript:msgbox%281%29) [Unknown](unregistered:payload)\n\n![Remote](https://untrusted.example/image.png)\n',
+  );
+  expect(
+    await element
+      .getByRole('link')
+      .evaluateAll((links) => links.map((link) => link.getAttribute('href'))),
+  ).toEqual([
+    'tel:+15551234',
+    'sms:+15551234',
+    'geo:50.45,30.52',
+    'webcal://example.com/calendar',
+    'web+notes:shared',
+    'TEL:+15555678',
+  ]);
+  await element.evaluate((node) => {
+    node.addEventListener('click', (event) => {
+      const link = event.composedPath().find((target) => target instanceof HTMLAnchorElement);
+      if (!link) return;
+      window.markdownFixture.external.push({
+        destination: link.getAttribute('href'),
+        prevented: event.defaultPrevented,
+      });
+      event.preventDefault();
+    });
+  });
+  const call = element.getByRole('link', { name: 'Call', exact: true });
+  await page.keyboard.press('Tab');
+  await expect(call).toBeFocused();
+  expect(await call.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('solid');
+  await call.press('Enter');
+  await element.getByRole('link', { name: 'Message', exact: true }).click();
+  expect(await page.evaluate(() => window.markdownFixture.external)).toEqual([
+    { destination: 'tel:+15551234', prevented: false },
+    { destination: 'sms:+15551234', prevented: false },
+  ]);
+  expect(await page.evaluate(() => window.markdownFixture.paths)).toEqual([]);
+  await expect(element.locator('img, [src], [srcset]')).toHaveCount(0);
+  expect(await element.evaluate((node) => (node as Renderer).resources)).toEqual([
+    { kind: 'image', label: 'Remote', destination: 'https://untrusted.example/image.png' },
+  ]);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(requests).toEqual([]);
 });
 
 test('keeps hostile HTML, URLs, and escaped markup inert through rerendering', async ({ page }) => {

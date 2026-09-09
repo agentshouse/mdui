@@ -10,19 +10,7 @@ extracted examples retain that license. Extraction preserves example numbers,
 sections, Markdown and HTML line endings, and converts the specification's
 visible tab arrows to tabs.
 
-The pure dependency conformance seam follows the source fixture's extension
-annotations: base examples use the core parser with the historical comment
-integration, and extension examples use the
-renderer profile. This avoids applying the autolink and tagfilter extensions
-to examples that intentionally demonstrate base syntax without them. Checkbox
-attribute order and void-element slash spelling are normalized on both sides;
-text, element nesting, and destinations are compared exactly.
-
-`allowDangerousHtml` is enabled only in these string comparisons. Browser
-rendering keeps raw HTML behind filtering hooks and preserves URI destinations
-only in an inert intermediate tree before applying the
-[component's safety policy](../../ARCHITECTURE.md#markdown-renderer).
-The browser specifications own acceptance of that
-policy, resource inertness, and interaction. Dependency qualification alone
-is not component or security evidence. Failing examples remain failures; they
-are not a permission to widen the profile or replace their expected results.
+The [test policy](../../docs/agents/TESTING.md#location-and-naming) owns the
+conformance modes, comparison rules, and browser acceptance. The renderer's
+built safety boundary is documented in
+[ARCHITECTURE.md](../../ARCHITECTURE.md#markdown-renderer).

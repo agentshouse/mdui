@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { dirname, extname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rolldown } from 'rolldown';
+import { build } from 'vite';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { dependencies } = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
@@ -20,13 +20,20 @@ for (const specifier of [
   input[entryName] = fileURLToPath(import.meta.resolve(specifier));
   imports[specifier] = `/dependencies/${entryName}.js`;
 }
-const bundle = await rolldown({ input, platform: 'browser' });
-let output;
-try {
-  ({ output } = await bundle.generate({ format: 'esm', entryFileNames: '[name].js' }));
-} finally {
-  await bundle.close();
-}
+const [{ output }] = await build({
+  configFile: false,
+  publicDir: false,
+  logLevel: 'warn',
+  build: {
+    write: false,
+    minify: false,
+    lib: {
+      entry: input,
+      formats: ['es'],
+      fileName: (_format, entryName) => `${entryName}.js`,
+    },
+  },
+});
 const modules = new Map(output.map((chunk) => [`/dependencies/${chunk.fileName}`, chunk.code]));
 const importMap = `<script type="importmap">${JSON.stringify({ imports })}</script>`;
 const types = new Map([
