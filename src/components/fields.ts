@@ -1,7 +1,7 @@
 import type { MdRuntime, QueryOptions } from '@agentshouse/mdruntime';
 import { fieldStyles } from './theme.js';
 
-type FieldDefinition = {
+export type FieldDefinition = {
   kind: string;
   required?: boolean;
   values?: readonly string[];

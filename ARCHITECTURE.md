@@ -168,18 +168,19 @@ const view = document.querySelector('md-document-view');
 view.bind(runtime, 'studio', 'work/alpha.md');
 ```
 
-`bind(runtime, room, path)` reads the Document through `runtime.query` and
-`runtime.observe('query')` with that Room and Path, and reads write grants and
-Provider-owned Paths from `runtime.observe('rooms')`. Typed fields render as
-the field controls of `components/01`, disabled. Text comes from the Query
+`bind(runtime, room, path)` observes the Document through
+`runtime.observe('query')` with that Room and Path, and observes write grants
+and Provider-owned Paths from `runtime.observe('rooms')`. Typed fields render
+as the field controls of `components/01`, disabled. Text comes from the Query
 result: the preamble, declared sections in declared order, extra sections the
 Document carries, structured sections as lists through the renderer, and the
 whole text of an untyped Document. The backlinks panel lists Query-derived
 referrers in the same Room and navigates with `open-path`. The History panel
 calls `runtime.history` only after it is opened, then shows native author and
-time and requested revision content, or the declared absence. A missing write
-grant or a Provider-owned Path shows the reason and keeps every field control
-disabled. Editing, Drafts, and Save are not present.
+time and requested revision content, or the declared absence. A later page is
+requested only when the user continues. A missing write grant or a
+Provider-owned Path shows the reason and keeps every field control disabled.
+Editing, Drafts, and Save are not present.
 
 ## Sync Status indicator
 

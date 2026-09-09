@@ -32,40 +32,37 @@ const writable = {
   },
 };
 
-async function start(page: Page, interval = 250) {
+async function start(page: Page) {
   await page.goto('/');
-  await page.evaluate(
-    async ({ room, interval }) => {
-      const { createMdRuntime } = await import('@agentshouse/mdruntime');
-      const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
-      const controller = new AbortController();
-      const adapter = createMemoryAdapter({ rooms: [room] });
-      const runtime = createMdRuntime({
-        adapter,
-        requiredGuarantees: [],
-        signal: controller.signal,
-        discoveryIntervalMs: interval,
+  await page.evaluate(async (room) => {
+    const { createMdRuntime } = await import('@agentshouse/mdruntime');
+    const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
+    const controller = new AbortController();
+    const adapter = createMemoryAdapter({ rooms: [room] });
+    const runtime = createMdRuntime({
+      adapter,
+      requiredGuarantees: [],
+      signal: controller.signal,
+      discoveryIntervalMs: 250,
+    });
+    const seen: SyncStatus[] = [];
+    runtime.observe('sync-status', (status) => seen.push(structuredClone(status)));
+    window.statusFixture = {
+      runtime,
+      adapter,
+      seen,
+      note: room.documents['notes/one.md'],
+      stop: () => controller.abort(),
+    };
+    const indicator = document.createElement('md-sync-status') as StatusElement;
+    indicator.bind(runtime);
+    document.body.replaceChildren(indicator);
+    await new Promise<void>((resolve) => {
+      runtime.observe('rooms', (visible) => {
+        if (visible.some((entry) => entry.roomVersion !== null)) resolve();
       });
-      const seen: SyncStatus[] = [];
-      runtime.observe('sync-status', (status) => seen.push(structuredClone(status)));
-      window.statusFixture = {
-        runtime,
-        adapter,
-        seen,
-        note: room.documents['notes/one.md'],
-        stop: () => controller.abort(),
-      };
-      const indicator = document.createElement('md-sync-status') as StatusElement;
-      indicator.bind(runtime);
-      document.body.replaceChildren(indicator);
-      await new Promise<void>((resolve) => {
-        runtime.observe('rooms', (visible) => {
-          if (visible.some((entry) => entry.roomVersion !== null)) resolve();
-        });
-      });
-    },
-    { room: writable, interval },
-  );
+    });
+  }, writable);
 }
 
 test.afterEach(async ({ page }) => {

@@ -1,9 +1,21 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { MdRuntime, QueryDocument, SyncStatus } from '@agentshouse/mdruntime';
+import type { HistoryResult, MdRuntime, QueryDocument } from '@agentshouse/mdruntime';
 import type { MemoryAdapter } from '@agentshouse/mdruntime/memory';
 
 type DocumentViewElement = HTMLElement & {
   bind: (runtime: MdRuntime, room: string, path: string) => void;
+};
+
+type HistoryRequest = {
+  locator: string;
+  path: string;
+  revision?: string;
+  pageToken?: string;
+};
+
+type PendingHistory = {
+  request: HistoryRequest;
+  resolve: (result: HistoryResult) => void;
 };
 
 declare global {
@@ -11,8 +23,9 @@ declare global {
     viewFixture: {
       runtime: MdRuntime;
       adapter: MemoryAdapter;
-      history: unknown[];
-      seen: SyncStatus[];
+      history: HistoryRequest[];
+      pendingHistory: PendingHistory[];
+      historyFails: boolean;
       stop: () => void;
     };
   }
@@ -63,8 +76,8 @@ const studio = {
   name: 'Studio',
   locator: 'studio',
   roomVersion: 'v1',
-  writeGrants: ['work'],
-  providerOwnedPaths: ['work/owned.md'],
+  writeGrants: ['./work'],
+  providerOwnedPaths: ['./work/owned.md'],
   documents: {
     'types/person.md': personType,
     'types/project.md': projectType,
@@ -76,11 +89,7 @@ const studio = {
   },
 };
 
-async function start(
-  page: Page,
-  rooms: unknown[],
-  options: { history?: boolean; interval?: number } = {},
-) {
+async function start(page: Page, rooms: unknown[], options: { history?: boolean } = {}) {
   await page.goto('/');
   await page.evaluate(
     async ({ rooms, options }) => {
@@ -88,40 +97,37 @@ async function start(
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const controller = new AbortController();
       const adapter = createMemoryAdapter({ rooms: rooms as never });
-      const history: unknown[] = [];
+      const history: HistoryRequest[] = [];
       if (options.history) {
-        adapter.script(
-          'history',
-          (request: { locator: string; path: string; revision?: string }) => {
-            history.push(structuredClone(request));
-            if (request.path === 'notes/gone.md') return { kind: 'no-history' };
-            if (request.revision === 'rev-past') {
-              return { kind: 'revision', content: '# Past revision\n\nEarlier words.\n' };
-            }
-            return {
-              kind: 'history',
-              revisions: [
-                { revision: 'rev-past', author: 'ada', time: '2026-09-01T00:00:00.000Z' },
-                { revision: 'rev-now', author: 'lin', time: '2026-09-08T12:00:00.000Z' },
-              ],
-            };
-          },
-        );
+        adapter.script('history', (request: HistoryRequest) => {
+          history.push(structuredClone(request));
+          if (request.path === 'notes/gone.md') return { kind: 'no-history' };
+          if (request.revision === 'rev-past') {
+            return { kind: 'revision', content: '# Past revision\n\nEarlier words.\n' };
+          }
+          return {
+            kind: 'history',
+            revisions: [
+              { revision: 'rev-past', author: 'ada', time: '2026-09-01T00:00:00.000Z' },
+              { revision: 'rev-now', author: 'lin', time: '2026-09-08T12:00:00.000Z' },
+            ],
+          };
+        });
       }
       const runtime = createMdRuntime({
         adapter,
         requiredGuarantees: [],
         signal: controller.signal,
-        discoveryIntervalMs: options.interval ?? 60_000,
+        discoveryIntervalMs: 60_000,
       });
       window.viewFixture = {
         runtime,
         adapter,
         history,
-        seen: [],
+        pendingHistory: [],
+        historyFails: false,
         stop: () => controller.abort(),
       };
-      runtime.observe('sync-status', (status) => window.viewFixture.seen.push(status));
       await new Promise<void>((resolve) => {
         runtime.observe('rooms', (visible) => {
           if (visible.some((room) => room.roomVersion !== null)) resolve();
@@ -151,6 +157,48 @@ async function queried(page: Page, path: string): Promise<QueryDocument> {
   return page.evaluate(
     (path) => window.viewFixture.runtime.query({ selector: { room: 'studio', path } }).documents[0],
     path,
+  );
+}
+
+async function deferHistory(page: Page) {
+  await page.evaluate(() => {
+    window.viewFixture.pendingHistory = [];
+    window.viewFixture.adapter.script('history', (request: HistoryRequest) => {
+      window.viewFixture.history.push(structuredClone(request));
+      return new Promise<HistoryResult>((resolve) => {
+        window.viewFixture.pendingHistory.push({ request: structuredClone(request), resolve });
+      });
+    });
+  });
+}
+
+async function answerHistory(page: Page, match: Partial<HistoryRequest>, result: HistoryResult) {
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        (match) =>
+          window.viewFixture.pendingHistory.findIndex(
+            (entry) =>
+              (match.path === undefined || entry.request.path === match.path) &&
+              (!('revision' in match) || entry.request.revision === match.revision) &&
+              (!('pageToken' in match) || entry.request.pageToken === match.pageToken),
+          ),
+        match,
+      ),
+    )
+    .not.toBe(-1);
+  await page.evaluate(
+    ({ match, result }) => {
+      const index = window.viewFixture.pendingHistory.findIndex(
+        (entry) =>
+          (match.path === undefined || entry.request.path === match.path) &&
+          (!('revision' in match) || entry.request.revision === match.revision) &&
+          (!('pageToken' in match) || entry.request.pageToken === match.pageToken),
+      );
+      const [pending] = window.viewFixture.pendingHistory.splice(index, 1);
+      pending.resolve(result);
+    },
+    { match, result },
   );
 }
 
@@ -315,4 +363,160 @@ test('is labelled, keyboard-operable, themed, and lays out at 360 pixels', async
   expect(await history.evaluate((element) => getComputedStyle(element).outlineColor)).toBe(
     'rgb(113, 59, 175)',
   );
+});
+
+test('ignores reversed deferred History list responses after navigation', async ({ page }) => {
+  await start(page, [studio], { history: true });
+  await deferHistory(page);
+  await mount(page, 'people/ada.md');
+  await page.getByText('History', { exact: true }).press('Enter');
+  await page.getByRole('button', { name: 'work/alpha.md', exact: true }).press('Enter');
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Alpha');
+  await page.getByText('History', { exact: true }).press('Enter');
+  await answerHistory(
+    page,
+    { path: 'work/alpha.md', revision: undefined },
+    {
+      kind: 'history',
+      revisions: [
+        { revision: 'rev-alpha', author: 'alpha-history', time: '2026-09-08T12:00:00.000Z' },
+      ],
+    },
+  );
+  await answerHistory(
+    page,
+    { path: 'people/ada.md', revision: undefined },
+    {
+      kind: 'history',
+      revisions: [{ revision: 'rev-ada', author: 'ada-history', time: '2026-09-01T00:00:00.000Z' }],
+    },
+  );
+  await expect(page.getByRole('button', { name: /alpha-history/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /ada-history/ })).toHaveCount(0);
+});
+
+test('ignores reversed deferred History revision content after a later selection', async ({
+  page,
+}) => {
+  await start(page, [studio], { history: true });
+  await deferHistory(page);
+  await mount(page, 'work/alpha.md');
+  await page.getByText('History', { exact: true }).press('Enter');
+  await answerHistory(
+    page,
+    { path: 'work/alpha.md', revision: undefined },
+    {
+      kind: 'history',
+      revisions: [
+        { revision: 'rev-past', author: 'ada', time: '2026-09-01T00:00:00.000Z' },
+        { revision: 'rev-now', author: 'lin', time: '2026-09-08T12:00:00.000Z' },
+      ],
+    },
+  );
+  await page.getByRole('button', { name: /ada/ }).press('Enter');
+  await page.getByRole('button', { name: /lin/ }).press('Enter');
+  await answerHistory(
+    page,
+    { path: 'work/alpha.md', revision: 'rev-now' },
+    { kind: 'revision', content: '# Current revision\n\nLater words.\n' },
+  );
+  await answerHistory(
+    page,
+    { path: 'work/alpha.md', revision: 'rev-past' },
+    { kind: 'revision', content: '# Past revision\n\nEarlier words.\n' },
+  );
+  await expect(page.locator('md-document-view')).toContainText('Later words.');
+  await expect(page.locator('md-document-view')).not.toContainText('Earlier words.');
+});
+
+test('loads a later History page on demand', async ({ page }, testInfo) => {
+  await start(page, [studio], { history: true });
+  await page.evaluate(() => {
+    window.viewFixture.adapter.script('history', (request: HistoryRequest) => {
+      window.viewFixture.history.push(structuredClone(request));
+      if (request.revision === 'rev-two') {
+        return { kind: 'revision', content: '# Second page\n\nLater retained words.\n' };
+      }
+      if (request.pageToken === 'page-2') {
+        return {
+          kind: 'history',
+          revisions: [{ revision: 'rev-two', author: 'lin', time: '2026-09-08T12:00:00.000Z' }],
+        };
+      }
+      return {
+        kind: 'history',
+        revisions: [{ revision: 'rev-one', author: 'ada', time: '2026-09-01T00:00:00.000Z' }],
+        pageToken: 'page-2',
+      };
+    });
+  });
+  await mount(page, 'work/alpha.md');
+  await page.getByText('History', { exact: true }).press('Enter');
+  await expect(page.getByRole('button', { name: /ada/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /lin/ })).toHaveCount(0);
+  expect(await page.evaluate(() => window.viewFixture.history)).toEqual([
+    { locator: 'studio', path: 'work/alpha.md' },
+  ]);
+  await page.getByRole('button', { name: 'Continue', exact: true }).press('Enter');
+  await expect(page.getByRole('button', { name: /lin/ })).toBeVisible();
+  expect(await page.evaluate(() => window.viewFixture.history)).toEqual([
+    { locator: 'studio', path: 'work/alpha.md' },
+    { locator: 'studio', path: 'work/alpha.md', pageToken: 'page-2' },
+  ]);
+  await page.getByRole('button', { name: /lin/ }).press('Enter');
+  await expect(page.locator('md-document-view')).toContainText('Later retained words.');
+  await page.screenshot({
+    path: testInfo.outputPath('document-view-history-continue.png'),
+    fullPage: true,
+  });
+});
+
+test('retries History after a temporary transport-uncertainty', async ({ page }) => {
+  await start(page, [studio], { history: true });
+  await page.evaluate(() => {
+    window.viewFixture.historyFails = true;
+    window.viewFixture.adapter.script('history', (request: HistoryRequest) => {
+      window.viewFixture.history.push(structuredClone(request));
+      if (window.viewFixture.historyFails) return { kind: 'transport-uncertainty' };
+      return {
+        kind: 'history',
+        revisions: [{ revision: 'rev-now', author: 'lin', time: '2026-09-08T12:00:00.000Z' }],
+      };
+    });
+  });
+  await mount(page, 'work/alpha.md');
+  await page.getByText('History', { exact: true }).press('Enter');
+  await expect(page.getByText('transport-uncertainty', { exact: true })).toBeVisible();
+  await expect(page.getByText('No history', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /lin/ })).toHaveCount(0);
+  await page.getByText('History', { exact: true }).press('Enter');
+  await page.evaluate(() => {
+    window.viewFixture.historyFails = false;
+  });
+  await page.getByText('History', { exact: true }).press('Enter');
+  await expect(page.getByRole('button', { name: /lin/ })).toBeVisible();
+  await expect(page.getByText('transport-uncertainty', { exact: true })).toHaveCount(0);
+});
+
+test('permits a normalized write-grant prefix and refuses Path escape', async ({ page }) => {
+  await start(page, [studio]);
+  await mount(page, 'work/alpha.md');
+  await expect(page.getByText('This Path has no write grant.', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'owner', exact: true })).toHaveValue(
+    'people/ada.md',
+  );
+  await mount(page, 'work/owned.md');
+  await expect(page.getByText('This Path is Provider-owned.', { exact: true })).toBeVisible();
+  await page.evaluate(() => window.viewFixture.stop());
+  await start(page, [
+    {
+      ...studio,
+      writeGrants: ['../work'],
+      providerOwnedPaths: ['../owned.md'],
+    },
+  ]);
+  await mount(page, 'work/alpha.md');
+  await expect(page.getByText('This Path has no write grant.', { exact: true })).toBeVisible();
+  await mount(page, 'work/owned.md');
+  await expect(page.getByText('This Path is Provider-owned.', { exact: true })).toHaveCount(0);
 });
