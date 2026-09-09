@@ -37,7 +37,10 @@ function externalLink(destination: string): boolean {
   return url !== null && (externalSchemes.has(url.protocol) || /^web\+[a-z]+:$/.test(url.protocol));
 }
 
-function internalPath(destination: string, currentPath: string): PathDestination | undefined {
+export function internalPath(
+  destination: string,
+  currentPath: string,
+): PathDestination | undefined {
   if (!destination || !currentPath || /[\\\u0000-\u0020]/.test(destination)) return;
   const hash = destination.indexOf('#');
   const target = hash < 0 ? destination : destination.slice(0, hash);

@@ -1,6 +1,6 @@
 # 02-document-view-reading-and-the-sync-status-indicator - Document View reading and the Sync Status indicator
 
-Status: ready-for-agent
+Status: resolved
 
 ## Frame
 
@@ -26,25 +26,25 @@ synchronization time, and whether attention is required.
 
 ## Acceptance criteria
 
-- [ ] Document View renders a typed file's fields by kind, its preamble, and
+- [x] Document View renders a typed file's fields by kind, its preamble, and
       every section it carries, including sections its MD Type does not
       declare. Declared sections keep their declared order, a structured
       section renders as its declared list, and an untyped file renders as
       its whole text.
-- [ ] The browser seam over the published in-memory Adapter shows a typed
+- [x] The browser seam over the published in-memory Adapter shows a typed
       file's declared section, an additional existing section, and its
       preamble from the public Query result under [R030][r030].
-- [ ] The backlinks panel lists every file in the same Room that references
+- [x] The backlinks panel lists every file in the same Room that references
       this one and navigates to it; the history panel transfers nothing until
       opened and then shows revisions with author and time and one revision's
       content on request, or the declared absence.
-- [ ] A file without a write grant, and a Provider-owned Path, render every
+- [x] A file without a write grant, and a Provider-owned Path, render every
       control disabled with the reason shown.
-- [ ] The indicator shows the state, Pending, Syncing, or Synced, the
+- [x] The indicator shows the state, Pending, Syncing, or Synced, the
       attention flag, the last completed synchronization time, and, while
       the Provider is unreachable, that changes remain Pending, from Observe
       alone.
-- [ ] Both elements are keyboard-operable, labelled, themed through CSS
+- [x] Both elements are keyboard-operable, labelled, themed through CSS
       custom properties, and lay out at 360 pixels.
 
 ## Mines

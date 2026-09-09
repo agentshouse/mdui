@@ -66,6 +66,7 @@ test('loads the App source and reads Types and Query through the published in-me
       type: 'note',
       fields: { type: 'note', title: 'Hello' },
       sections: { Body: 'Published packages.\n' },
+      preamble: '',
       backlinks: [],
     },
   ]);

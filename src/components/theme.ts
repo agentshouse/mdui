@@ -71,3 +71,65 @@ export const markdownStyles = `
   input { accent-color: var(--md-focus, light-dark(#1759bc, #92bbff)); }
   hr { border: 0; border-top: 1px solid var(--md-border, light-dark(#74808c, #8b99a7)); }
 `;
+
+export const viewStyles = `
+  :host {
+    display: block;
+    min-width: 0;
+    color-scheme: var(--md-color-scheme, light dark);
+    background: var(--md-background, light-dark(#fff, #121820));
+    padding: .75rem;
+    border-radius: .5rem;
+    color: var(--md-text, light-dark(#20252b, #e8ebef));
+    font: 1rem/1.5 system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  h1, h2 { line-height: 1.25; overflow-wrap: anywhere; }
+  h1 { font-size: 1.35rem; margin: 0 0 .75rem; }
+  h2 { font-size: 1.1rem; margin: 0 0 .5rem; }
+  .reason {
+    color: var(--md-error, light-dark(#a32222, #ffb3ac));
+    margin: 0 0 .75rem;
+  }
+  .reason:empty { display: none; }
+  .fields, .part, .panel { display: grid; gap: .5rem; min-width: 0; margin: 0 0 1rem; }
+  button, summary {
+    color: inherit;
+    font: inherit;
+    border: 1px solid var(--md-border, light-dark(#74808c, #8b99a7));
+    border-radius: .35rem;
+    background: var(--md-surface, light-dark(#fff, #1d232b));
+    padding: .55rem .7rem;
+    min-height: 2.75rem;
+    max-width: 100%;
+  }
+  button { width: 100%; text-align: start; }
+  :focus-visible { outline: 3px solid var(--md-focus, light-dark(#1759bc, #92bbff)); outline-offset: 3px; }
+  details {
+    border: 1px solid var(--md-border, light-dark(#74808c, #8b99a7));
+    border-radius: .35rem;
+    padding: .65rem;
+    min-width: 0;
+  }
+  summary { cursor: pointer; font-weight: 600; }
+  .revisions, .links { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+  .absence { margin: .5rem 0 0; }
+`;
+
+export const statusStyles = `
+  :host {
+    display: block;
+    min-width: 0;
+    color-scheme: var(--md-color-scheme, light dark);
+    background: var(--md-background, light-dark(#fff, #121820));
+    padding: .75rem;
+    border-radius: .5rem;
+    color: var(--md-text, light-dark(#20252b, #e8ebef));
+    font: 1rem/1.5 system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [role='status'] { display: grid; gap: .35rem; overflow-wrap: anywhere; }
+  p { margin: 0; }
+  .state { font-weight: 600; }
+  .attention { color: var(--md-error, light-dark(#a32222, #ffb3ac)); }
+`;
