@@ -3,15 +3,17 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 
-test('refuses a Provider-specific import outside the Adapter and passes after its removal', ({ onTestFinished }) => {
+test('refuses a Provider-specific import outside the Adapter and passes after its removal', ({
+  onTestFinished,
+}) => {
   mkdirSync('tmp', { recursive: true });
   const directory = mkdtempSync('tmp/neutrality-');
   onTestFinished(() => rmSync(directory, { recursive: true, force: true }));
   const entry = join(directory, 'index.ts');
-  const cruise = () => spawnSync('node_modules/.bin/depcruise', [
-    entry,
-    '--config', '.dependency-cruiser.cjs',
-  ], { encoding: 'utf8' });
+  const cruise = () =>
+    spawnSync('node_modules/.bin/depcruise', [entry, '--config', '.dependency-cruiser.cjs'], {
+      encoding: 'utf8',
+    });
 
   writeFileSync(entry, "import '@agentshouse/mdruntime';\n");
   expect(cruise().status).toBe(0);

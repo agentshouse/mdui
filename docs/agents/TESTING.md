@@ -108,7 +108,11 @@ Tests live at public seams, never against internals, and use `.spec.ts`:
 | `test/browser/` | Playwright: the App's DOM and its public MD Runtime integration                  |
 | `test/static/`  | Vitest `static` project: the dependency-cruiser command's acceptance and refusal |
 
-The foundation has one specification per lane. The pure placeholder establishes
-loading, and the browser specification reads Types and Query over the published
-in-memory Adapter. Component and screen tickets add their owning public-seam
-specifications. Browser results and traces are written under `tmp/browser/`.
+The browser specifications own App loading and the field controls over the
+published in-memory Adapter. They exercise actual native interaction, value and
+validity events, same-Room reference choices, list updates, locale, visible
+focus, disabled states, and 360px light/dark layout. The pure lane permits an
+empty suite until there is independent pure behavior to protect; it does not
+import the browser entry in Node as a placeholder. Browser results, screenshots,
+and traces are written under `tmp/browser/`. Copy retained Assignment evidence
+to its own `tmp/` directory before another browser run replaces the results.
