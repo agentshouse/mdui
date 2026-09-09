@@ -8,7 +8,7 @@
     "ops": "node -- scripts/ops.mjs"
   },
   "dependencies": {
-    "@agentshouse/mdruntime": "0.1.0-alpha.1",
+    "@agentshouse/mdruntime": "0.1.0-alpha.2",
     "@agentshouse/mdruntime-adapter": "0.1.0-alpha.1"
   },
   "devDependencies": {
@@ -17,6 +17,7 @@
     "@types/node": "24.13.3",
     "dependency-cruiser": "18.2.0",
     "oxfmt": "0.65.0",
+    "rolldown": "1.2.7",
     "typescript": "6.0.3",
     "vitest": "4.1.11"
   },

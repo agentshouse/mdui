@@ -7,9 +7,9 @@ appears here only as a callout linking to its requirement, ADR, or PRD in
 The repository is one npm project. `src/index.html` loads the TypeScript
 ES-module entry in `src/index.ts`; the entry loads the published MD Runtime
 without creating product state. There are no components or screens yet.
-Its application dependencies are `@agentshouse/mdruntime` and
-`@agentshouse/mdruntime-adapter`, each pinned to the published
-`0.1.0-alpha.1` prerelease with registry integrity in `package-lock.json`.
+Its application dependencies are `@agentshouse/mdruntime` at
+`0.1.0-alpha.2` and `@agentshouse/mdruntime-adapter` at `0.1.0-alpha.1`,
+with published registry integrity in `package-lock.json`.
 
 `compose.yaml` owns one Linux check service. Its image contains the locked
 toolchain and Chromium; each invocation uses this worktree's source and an
@@ -19,10 +19,10 @@ The check runner checks source imports with dependency-cruiser and runs the
 three public test seams documented in [`TESTING.md`](docs/agents/TESTING.md).
 
 The browser lane's local host serves the App source. It transforms TypeScript
-on request and maps bare imports through the installed packages' public
-exports. Its one browser specification connects the published MD Runtime to
-its public in-memory Adapter. This host is check tooling, and no server or
-bundle is shipped by the workspace.
+on request and uses Rolldown to bundle the installed packages' public exports
+and their pinned dependencies in memory. Its browser specification reads
+Types and Query through the published MD Runtime's public in-memory Adapter.
+This host is check tooling, and no server or bundle is shipped by the workspace.
 
 The chosen composition is owned by MD Runtime's
 [PRD-0005](https://github.com/agentshouse/mdruntime/blob/main/docs/prd/prd-0005-shipped-form-and-release.md)

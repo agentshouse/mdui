@@ -31,9 +31,10 @@ Operator checks such as `docs check` and `backlog check` also run through
 this service: `docker compose run --rm --build check npm run ops -- docs check`.
 
 The browser runner serves `src/index.html` and compiles requested source
-modules with swc in memory. Its import map resolves the installed
-dependencies' public exports. Playwright loads this App directly, without a
-bundle step or compiled-file dependency. The browser fixture uses
+modules with swc in memory. Rolldown bundles the installed dependencies' public
+exports and their pinned dependency graph into browser ES modules in memory;
+the import map resolves those entries. Playwright loads the App source
+directly with no compiled-file dependency. The browser fixture uses
 `@agentshouse/mdruntime/memory`; component specs from `components/01` onward
 use that same public in-memory Adapter. It belongs only to tests and is
 excluded from the eventual bundle by PRD-0005 in `agentshouse/mdruntime`.
@@ -107,7 +108,7 @@ Tests live at public seams, never against internals, and use `.spec.ts`:
 | `test/browser/` | Playwright: the App's DOM and its public MD Runtime integration                  |
 | `test/static/`  | Vitest `static` project: the dependency-cruiser command's acceptance and refusal |
 
-The foundation has one specification per lane. Its pure and browser
-placeholders establish loading only; later component and screen tickets
-replace them with their owning public-seam specifications. Browser results
-and traces are written under `tmp/browser/`.
+The foundation has one specification per lane. The pure placeholder establishes
+loading, and the browser specification reads Types and Query over the published
+in-memory Adapter. Component and screen tickets add their owning public-seam
+specifications. Browser results and traces are written under `tmp/browser/`.

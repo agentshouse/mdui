@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('loads the App source and connects the published MD Runtime through its in-memory Adapter', async ({ page }) => {
+test('loads the App source and reads Types and Query through the published in-memory Adapter', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   const entry = page.waitForResponse((response) => new URL(response.url()).pathname === '/src/index.js');
@@ -8,36 +8,55 @@ test('loads the App source and connects the published MD Runtime through its in-
   expect((await entry).status()).toBe(200);
   await expect(page).toHaveTitle('MD UI');
 
-  const rooms = await page.evaluate(async () => {
+  const visible = await page.evaluate(async () => {
     const { createMdRuntime } = await import('@agentshouse/mdruntime');
     const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
-    const mdModel = { identity: 'fixture', version: '1.0.0' };
     const controller = new AbortController();
     try {
       const runtime = createMdRuntime({
         adapter: createMemoryAdapter({
-          mdModel,
           rooms: [{
             name: 'Fixture',
             locator: 'fixture',
             roomVersion: 'v1',
             writeGrants: [],
             providerOwnedPaths: [],
+            documents: {
+              'types/note.md': '---\ntype: definition\nfields:\n  title:\n    kind: string\nsections:\n  Body:\n    kind: text\n---\n',
+              'notes/hello.md': '---\ntype: note\ntitle: Hello\n---\n## Body\nPublished packages.\n',
+            },
           }],
         }),
-        mdModel,
         requiredGuarantees: [],
         signal: controller.signal,
       });
-      return await new Promise<string[]>((resolve) => {
+      await new Promise<void>((resolve) => {
         runtime.observe('rooms', (visible) => {
-          if (visible.length > 0) resolve(visible.map((room) => room.name));
+          if (visible.some((room) => room.roomVersion === 'v1')) resolve();
         });
       });
+      return {
+        types: runtime.types('fixture'),
+        query: runtime.query({ selector: { room: 'fixture', type: 'note' } }),
+      };
     } finally {
       controller.abort();
     }
   });
-  expect(rooms).toEqual(['Fixture']);
+  expect(visible.types).toEqual([{
+    name: 'note',
+    path: 'types/note.md',
+    fields: { title: { kind: 'string' } },
+    sections: { Body: { kind: 'text' } },
+  }]);
+  expect(visible.query.documents).toEqual([{
+    room: 'fixture',
+    path: 'notes/hello.md',
+    type: 'note',
+    fields: { type: 'note', title: 'Hello' },
+    sections: { Body: 'Published packages.\n' },
+    backlinks: [],
+  }]);
+  expect(visible.query.roomVersions).toEqual({ fixture: 'v1' });
   expect(errors).toEqual([]);
 });
