@@ -42,7 +42,7 @@ export function connectLinks(
 ): void {
   for (const link of container.querySelectorAll('a')) {
     const destination = link.getAttribute('href') ?? '';
-    if (/^(?:https?:|mailto:|ircs?:|xmpp:|\/\/)/i.test(destination)) {
+    if (/^(?:https?:|ftp:|mailto:|ircs?:|xmpp:|\/\/)/i.test(destination)) {
       link.rel = 'noopener noreferrer';
       continue;
     }

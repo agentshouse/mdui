@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { micromark } from 'micromark';
-import { markdownProfile } from '../../src/components/profile.js';
+import { commonmarkProfile, markdownProfile } from '../../src/components/profile.js';
 
 const examples: { number: number; extension: string; markdown: string; html: string }[] =
   JSON.parse(readFileSync('test/fixtures/gfm-0.29.json', 'utf8'));
@@ -20,7 +20,7 @@ function normalizeCheckboxAttributes(html: string): string {
 }
 
 test.each(examples)('GFM 0.29 example $number', ({ extension, markdown, html }) => {
-  const configuration = extension ? markdownProfile : {};
+  const configuration = extension ? markdownProfile : commonmarkProfile;
   expect(
     normalizeCheckboxAttributes(
       micromark(markdown, {

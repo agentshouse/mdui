@@ -1,6 +1,6 @@
 # 01-markdown-renderer-and-field-controls - Markdown renderer and field controls
 
-Status: ready-for-agent
+Status: resolved
 
 ## Frame
 
@@ -26,21 +26,21 @@ elements as one value.
 
 ## Acceptance criteria
 
-- [ ] The renderer renders the pinned profile, strips every raw HTML element
+- [x] The renderer renders the pinned profile, strips every raw HTML element
       except details and summary, never executes a script, emits images and
       other resources as references only, and raises an event for an
       internal link with its Path.
-- [ ] Each of the six controls renders as a labelled, keyboard-operable
+- [x] Each of the six controls renders as a labelled, keyboard-operable
       element with visible focus, exposes its value and validity, and emits
       a change event; the reference control lists candidates from the same
       Room and required type through Query and stores a relative Path; the
       list control changes as one value.
-- [ ] Every element is a standard custom element usable from plain HTML with
+- [x] Every element is a standard custom element usable from plain HTML with
       no framework and takes its theme from CSS custom properties with light
       and dark defaults following the browser preference.
-- [ ] Strings are English, dates and numbers follow the browser locale, and
+- [x] Strings are English, dates and numbers follow the browser locale, and
       each element lays out at a 360 pixel viewport.
-- [ ] The component seam runs in the browser lane over the in-memory Adapter.
+- [x] The component seam runs in the browser lane over the in-memory Adapter.
 
 ## Mines
 

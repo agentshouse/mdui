@@ -9,7 +9,13 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { dependencies } = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
 const imports = {};
 const input = {};
-for (const specifier of [...Object.keys(dependencies), '@agentshouse/mdruntime/memory']) {
+for (const specifier of [
+  ...Object.keys(dependencies),
+  '@agentshouse/mdruntime/memory',
+  'micromark-core-commonmark',
+  'micromark-util-character',
+  'micromark-util-sanitize-uri',
+]) {
   const entryName = `package-${Object.keys(input).length}`;
   input[entryName] = fileURLToPath(import.meta.resolve(specifier));
   imports[specifier] = `/dependencies/${entryName}.js`;

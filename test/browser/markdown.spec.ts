@@ -381,6 +381,48 @@ test('autolinks FTP text from the pinned GFM 0.29 example 628', async ({ page })
   ).toHaveAttribute('href', 'ftp://foo.bar.baz');
 });
 
+test('keeps FTP literals within GFM link boundaries without activating resources', async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  await page.route('**/*', (route) => {
+    requests.push(route.request().url());
+    return route.abort();
+  });
+  const element = await render(
+    page,
+    'FTP://files.example/a?x=1&y=2.\n\n(ftp://files.example/search?q=(manual))\n\nftp://files.example/path&copy;\n\nftp://files.example/a"b\n\nftp://files.example/é\n\n`ftp://code.example`\n\n[Read ftp://label.example](next.md)\n\n![ftp://image.example](../assets/diagram.svg)\n\nwordftp://joined.example ftp://missing-dot ftp://bad_name.example\n',
+  );
+  expect(
+    await element
+      .getByRole('link')
+      .evaluateAll((links) => links.map((link) => link.getAttribute('href'))),
+  ).toEqual([
+    'FTP://files.example/a?x=1&y=2',
+    'ftp://files.example/search?q=(manual)',
+    'ftp://files.example/path',
+    'ftp://files.example/a%22b',
+    'ftp://files.example/%C3%A9',
+    '#',
+  ]);
+  await expect(element.locator('code')).toHaveText('ftp://code.example');
+  await expect(element.getByRole('link', { name: 'Read ftp://label.example' })).toHaveCount(1);
+  await expect(element.locator('a a, img, [src]')).toHaveCount(0);
+  await expect(element).toContainText(
+    'wordftp://joined.example ftp://missing-dot ftp://bad_name.example',
+  );
+  await page.keyboard.press('Tab');
+  await expect(element.getByRole('link').first()).toBeFocused();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(requests).toEqual([]);
+  expect(await page.evaluate(() => window.markdownFixture.paths)).toEqual([]);
+});
+
 test('preserves literal inline comment text from pinned GFM 0.29 examples 645 and 646', async ({
   page,
 }) => {
@@ -391,4 +433,65 @@ test('preserves literal inline comment text from pinned GFM 0.29 examples 645 an
   await expect(element).toContainText('foo <!-- not a comment -- two hyphens -->');
   await expect(element).toContainText('foo <!--> foo -->');
   await expect(element).toContainText('foo <!-- foo--->');
+});
+
+test('applies the same safe link and inert resource policy to explicit FTP and data destinations', async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  await page.route('**/*', (route) => {
+    requests.push(route.request().url());
+    return route.abort();
+  });
+  const element = await render(
+    page,
+    '[Archive](ftp://files.example/archive) and <ftp://files.example/manual>.\n\n![Data reference](data:image/png;base64,AAAA)\n\n[Script](javascript:alert%281%29) [Data link](data:text/html,hello)\n',
+  );
+  await expect(element.getByRole('link', { name: 'Archive', exact: true })).toHaveAttribute(
+    'href',
+    'ftp://files.example/archive',
+  );
+  await expect(
+    element.getByRole('link', { name: 'ftp://files.example/manual', exact: true }),
+  ).toHaveAttribute('href', 'ftp://files.example/manual');
+  await expect(element.getByRole('link', { name: /^(Script|Data link)$/ })).toHaveCount(0);
+  expect(await element.evaluate((node) => (node as Renderer).resources)).toEqual([
+    { kind: 'image', label: 'Data reference', destination: 'data:image/png;base64,AAAA' },
+  ]);
+  await expect(element.locator('img, [src], [srcset]')).toHaveCount(0);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(requests).toEqual([]);
+});
+
+test('parses Markdown inside invalid inline comments while valid comments remain inert', async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  await page.route('**/*', (route) => {
+    requests.push(route.request().url());
+    return route.abort();
+  });
+  const element = await render(
+    page,
+    'Text <!-- invalid -- **Visible** ![Diagram](../assets/diagram.svg) -->\n\nText <!-- valid **Hidden** <img src="https://untrusted.example/comment"> -->\n\n<!-- block -- <img src="https://untrusted.example/block"> -->\n',
+  );
+  await expect(element.locator('strong')).toHaveText('Visible');
+  await expect(element).toContainText('Text <!-- invalid -- Visible Diagram -->');
+  await expect(element).not.toContainText('Hidden');
+  await expect(element.locator('img, [src]')).toHaveCount(0);
+  expect(await element.evaluate((node) => (node as Renderer).resources)).toEqual([
+    { kind: 'image', label: 'Diagram', destination: '../assets/diagram.svg' },
+  ]);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(requests).toEqual([]);
 });

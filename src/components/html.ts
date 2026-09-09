@@ -107,6 +107,7 @@ export function renderMarkdown(source: string): {
   const template = document.createElement('template');
   template.innerHTML = micromark(source, {
     ...markdownProfile,
+    allowDangerousProtocol: true,
     htmlExtensions: [...markdownProfile.htmlExtensions, rawHtmlFilter(resources)],
   });
   const tags = new Set([

@@ -33,7 +33,8 @@ this service: `docker compose run --rm --build check npm run ops -- docs check`.
 The browser runner serves `src/index.html` and compiles requested source
 modules with swc in memory. Rolldown bundles the installed dependencies' public
 root exports and the public Runtime memory entry with their pinned dependency
-graph into browser ES modules in memory;
+graph into browser ES modules in memory, including the locked micromark
+utility roots used by the renderer's syntax extensions;
 the import map resolves those entries. Playwright loads the App source
 directly with no compiled-file dependency. The browser fixture uses
 `@agentshouse/mdruntime/memory`; component specs from `components/01` onward
@@ -118,7 +119,9 @@ of Model collection validity; normal section input is read through Query.
 The pure lane qualifies the renderer dependencies against the
 [original GFM 0.29 corpus](../../test/fixtures/README.md), preserving the source's
 base/extension distinction. It is not browser safety evidence, and its current
-profile failures remain failures. No empty-suite exemption remains.
+configuration applies the historical inline-comment rule to both fixture modes
+and GFM extensions only to the extension examples. Expected profile output is
+never widened to accommodate a dependency difference. No empty-suite exemption remains.
 Browser results, screenshots,
 and traces are written under `tmp/browser/`. Copy retained Assignment evidence
 to its own `tmp/` directory before another browser run replaces the results.

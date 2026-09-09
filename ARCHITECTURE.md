@@ -24,7 +24,9 @@ three public test seams documented in [`TESTING.md`](docs/agents/TESTING.md).
 The browser lane's local host serves the App source. It transforms TypeScript
 on request and uses Rolldown to bundle the installed packages' public root
 exports and the public `@agentshouse/mdruntime/memory` fixture entry, with
-their pinned dependencies, in memory. Its browser specification reads
+their pinned dependencies, in memory. It also maps the public roots of the
+locked micromark construct, character, and URI utilities used by the profile
+extensions. Its browser specification reads
 Types and Query through the published MD Runtime's public in-memory Adapter.
 This host is check tooling, and no server or bundle is shipped by the workspace.
 
@@ -48,10 +50,16 @@ through the public Runtime and supplies it to the renderer.
 The profile configuration disables single-tilde deletion and footnote constructs.
 It adds no frontmatter, math, directives, MD Type validation, or Change logic.
 The [original GFM 0.29 fixtures](test/fixtures/README.md) qualify the selected
-dependency versions. **Components01 is still incomplete:** the exact pins fail
-the original FTP autolink and inline-comment examples, also reproduced at the
-browser component seam. The profile has not been broadened to accept those
-differences, and no replacement parser has been added.
+dependency graph and profile integration against all 673 original examples.
+Two [supported micromark syntax extensions](https://github.com/micromark/micromark#extending-markdown)
+restore the pinned profile's FTP literals and historical inline-comment rule.
+The comment extension checks that rule with the token stream's lookahead API
+and delegates HTML recognition to the public `htmlText` construct from the
+locked `micromark-core-commonmark` package. Invalid comments return to ordinary
+Markdown parsing; block HTML keeps its upstream grammar. The FTP extension
+recognizes only the missing literal scheme inside micromark's text context,
+observes link-label state, and compiles its token through the locked public URI
+utility. No input preprocessing or installed-package patch is used.
 
 Public HTML token hooks distinguish raw HTML from Markdown-generated elements.
 Raw fragments pass through an inert template. Temporary comment markers preserve
@@ -60,6 +68,11 @@ no raw attributes except the boolean disclosure `open` state. Every other raw
 element is stripped. Script, style, embedded-document and raw-text bodies are
 dropped. A second inert template receives the compiler output, and a fresh
 allowlisted DOM is constructed without fetching elements or resource attributes.
+The inert compilation stage preserves URI destinations, including FTP and data
+references, with `allowDangerousProtocol: true`. That string is never inserted
+into a live tree: resource destinations become data and the link connection
+step admits only supported external schemes or same-Room Paths before attachment.
+Raw HTML compilation remains disabled except for the filtering hooks above.
 
 Images appear as labelled inert placeholders. The defensive `resources` getter
 exposes the current references, and each render emits a bubbling, composed
