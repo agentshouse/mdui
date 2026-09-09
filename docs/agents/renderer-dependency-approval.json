@@ -1,0 +1,8 @@
+{
+  "state": "approved",
+  "at": "2026-09-09T14:21:22.673554+00:00",
+  "author": "user",
+  "source": "Current Master task async reply call_jQqiLZxj24q1yvlgRYMGJXzK item1",
+  "quote": "Allow these renderer dependencies",
+  "scope": "micromark4.0.2 and micromark-extension-gfm3.0.0 plus lockedgraph; samecomponents01; pinnedprofile/browseracceptance stillowed"
+}

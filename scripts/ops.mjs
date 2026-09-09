@@ -11,8 +11,8 @@ const commands = {
   format: {
     command: 'node_modules/.bin/oxfmt',
     args: [
-      'src',
-      'test',
+      'src/**/*.{ts,html}',
+      'test/**/*.ts',
       'scripts/ops.mjs',
       'scripts/check.mjs',
       'scripts/host.mjs',

@@ -4,16 +4,21 @@ Status: blocked
 
 ## Frame
 
-Rests on PRD-0004 in `agentshouse/mdruntime`
-(`docs/prd/prd-0004-document-view-components-and-base-template.md`) sections
-Components and Document View, and on `R006`, `R011`, `R016`, and `R031`. It
-uses the Sync Status and the History surface of the MD Runtime.
+Rests on [PRD-0004](https://github.com/agentshouse/mdruntime/blob/main/docs/prd/prd-0004-document-view-components-and-base-template.md)
+in `agentshouse/mdruntime`, sections Components and Document View, and on
+[`R006`, `R011`, `R016`, `R030`, and `R031`](https://github.com/agentshouse/mdruntime/blob/main/docs/requirements/ledger.md).
+See [Query visibility][r030] and [Document View][r031] at those owners.
+It uses the Types, Query, Observe, Sync Status, and History surfaces of the MD Runtime.
+
+[r030]: https://github.com/agentshouse/mdruntime/blob/main/docs/requirements/ledger.md#r030--md-runtime-api
+[r031]: https://github.com/agentshouse/mdruntime/blob/main/docs/requirements/ledger.md#r031--document-view-and-md-ui
 
 ## What to build
 
 Document View for reading: one Document of one Room shown with its typed
-fields as the controls of `components/01`, its sections through the
-renderer, a backlinks panel from a Local Query, and a history panel that
+fields as the controls of `components/01`, its text through the renderer under
+[R031][r031] from the public Query result, a backlinks panel from a Local Query,
+and a history panel that
 loads the file's revisions only when opened; every control disabled with the
 reason visible when the file has no write grant or is a Provider-owned Path.
 The Sync Status indicator: the one App state, the last completed
@@ -21,9 +26,14 @@ synchronization time, and whether attention is required.
 
 ## Acceptance criteria
 
-- [ ] Document View renders a typed file's fields by kind, its sections in
-      declared order, a structured section as its declared list, and an
-      untyped file as its whole rendered text.
+- [ ] Document View renders a typed file's fields by kind, its preamble, and
+      every section it carries, including sections its MD Type does not
+      declare. Declared sections keep their declared order, a structured
+      section renders as its declared list, and an untyped file renders as
+      its whole text.
+- [ ] The browser seam over the published in-memory Adapter shows a typed
+      file's declared section, an additional existing section, and its
+      preamble from the public Query result under [R030][r030].
 - [ ] The backlinks panel lists every file in the same Room that references
       this one and navigates to it; the history panel transfers nothing until
       opened and then shows revisions with author and time and one revision's
@@ -44,6 +54,11 @@ deliver Sync Status and the History surface. Nothing is editable yet;
 controls render read-only here and gain editing in `components/03`. The
 indicator never belongs to one Room or file. No element calls the Adapter or
 the browser store.
+
+Public read-capability acceptance and package holds remain at
+[`runtime/03`](https://github.com/agentshouse/mdruntime/blob/main/docs/backlog/tickets/runtime/03-bootstrap-into-durable-local-replicas-and-local-query.md#acceptance-criteria).
+Use its published Runtime surface; no second parser, direct Model call, or
+local projection of Document text may substitute for that capability.
 
 ## Out of scope
 

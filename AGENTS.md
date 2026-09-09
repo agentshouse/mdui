@@ -68,6 +68,10 @@ instead of being invented during implementation.
 - Node, npm, and dependency versions are pinned in `package.json` and
   `package-lock.json`. Keep the Node and npm pins aligned with Agents House.
 - Dependencies stay minimal: the MD Runtime, the Adapter, and what they pin.
+  For the Markdown renderer only, the User approved `micromark@4.0.2`,
+  `micromark-extension-gfm@3.0.0`, and their locked dependencies; retain the
+  pinned profile and browser safety acceptance. See the
+  [approval receipt](docs/agents/renderer-dependency-approval.json).
   An App Creator's agent adds whatever its fork needs later.
 
 ## Ticket delivery

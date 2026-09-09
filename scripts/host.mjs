@@ -3,21 +3,38 @@ import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { dirname, extname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { build } from 'vite';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { dependencies } = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
 const imports = {};
-const packageDirectories = [];
-for (const name of Object.keys(dependencies)) {
-  const manifestPath = fileURLToPath(import.meta.resolve(`${name}/package.json`));
-  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-  packageDirectories.push(`${relative(root, dirname(manifestPath))}/`);
-  for (const entry of Object.keys(manifest.exports)) {
-    if (entry === './package.json') continue;
-    const specifier = name + entry.slice(1);
-    imports[specifier] = `/${relative(root, fileURLToPath(import.meta.resolve(specifier)))}`;
-  }
+const input = {};
+for (const specifier of [
+  ...Object.keys(dependencies),
+  '@agentshouse/mdruntime/memory',
+  'micromark-core-commonmark',
+  'micromark-util-character',
+  'micromark-util-sanitize-uri',
+]) {
+  const entryName = `package-${Object.keys(input).length}`;
+  input[entryName] = fileURLToPath(import.meta.resolve(specifier));
+  imports[specifier] = `/dependencies/${entryName}.js`;
 }
+const [{ output }] = await build({
+  configFile: false,
+  publicDir: false,
+  logLevel: 'warn',
+  build: {
+    write: false,
+    minify: false,
+    lib: {
+      entry: input,
+      formats: ['es'],
+      fileName: (_format, entryName) => `${entryName}.js`,
+    },
+  },
+});
+const modules = new Map(output.map((chunk) => [`/dependencies/${chunk.fileName}`, chunk.code]));
 const importMap = `<script type="importmap">${JSON.stringify({ imports })}</script>`;
 const types = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -31,9 +48,13 @@ const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, 'http://127.0.0.1:4173');
     const pathname = url.pathname === '/' ? '/src/index.html' : decodeURIComponent(url.pathname);
+    if (modules.has(pathname)) {
+      response.writeHead(200, { 'content-type': types.get('.js') }).end(modules.get(pathname));
+      return;
+    }
     let path = resolve(root, `.${pathname}`);
     const name = relative(root, path);
-    if (!name.startsWith('src/') && !packageDirectories.some((prefix) => name.startsWith(prefix))) {
+    if (!name.startsWith('src/')) {
       response.writeHead(404).end();
       return;
     }

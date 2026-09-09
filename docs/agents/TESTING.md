@@ -31,9 +31,13 @@ Operator checks such as `docs check` and `backlog check` also run through
 this service: `docker compose run --rm --build check npm run ops -- docs check`.
 
 The browser runner serves `src/index.html` and compiles requested source
-modules with swc in memory. Its import map resolves the installed
-dependencies' public exports. Playwright loads this App directly, without a
-bundle step or compiled-file dependency. The browser fixture uses
+modules with swc in memory. The public Vite build API, already locked through
+Vitest, bundles the installed dependencies' public
+root exports and the public Runtime memory entry with their pinned dependency
+graph into browser ES modules in memory, including the locked micromark
+utility roots used by the renderer's syntax extensions;
+the import map resolves those entries. Playwright loads the App source
+directly with no compiled-file dependency. The browser fixture uses
 `@agentshouse/mdruntime/memory`; component specs from `components/01` onward
 use that same public in-memory Adapter. It belongs only to tests and is
 excluded from the eventual bundle by PRD-0005 in `agentshouse/mdruntime`.
@@ -107,7 +111,21 @@ Tests live at public seams, never against internals, and use `.spec.ts`:
 | `test/browser/` | Playwright: the App's DOM and its public MD Runtime integration                  |
 | `test/static/`  | Vitest `static` project: the dependency-cruiser command's acceptance and refusal |
 
-The foundation has one specification per lane. Its pure and browser
-placeholders establish loading only; later component and screen tickets
-replace them with their owning public-seam specifications. Browser results
-and traces are written under `tmp/browser/`.
+The browser specifications own App loading, the Markdown renderer, and field controls over the
+published in-memory Adapter. They exercise actual native interaction, value and
+validity events, same-Room reference choices, list updates, locale, visible
+focus, disabled states, and 360px light/dark layout. The renderer seam also
+accepts adversarial text directly through its public property, independently
+of Model collection validity; normal section input is read through Query.
+The pure lane qualifies the renderer dependencies against the
+[original GFM 0.29 corpus](../../test/fixtures/README.md), preserving the source's
+base/extension distinction. It is not browser safety evidence, and its current
+configuration applies the historical inline-comment rule to both fixture modes
+and GFM extensions only to the extension examples. Expected profile output is
+never widened to accommodate a dependency difference. Only checkbox attribute
+order and void-element slash spelling are normalized; text, element nesting,
+and destinations compare exactly. `allowDangerousHtml` is enabled only in these
+string comparisons. No empty-suite exemption remains.
+Browser results, screenshots,
+and traces are written under `tmp/browser/`. Copy retained Assignment evidence
+to its own `tmp/` directory before another browser run replaces the results.
