@@ -6,9 +6,10 @@ appears here only as a callout linking to its requirement, ADR, or PRD in
 
 The repository is one npm project. `src/index.html` loads the TypeScript
 ES-module entry in `src/index.ts`; the entry loads the published MD Runtime
-and registers the field controls and Markdown renderer without creating a Runtime instance.
+and registers the field controls, Markdown renderer, Document View, and Sync
+Status indicator without creating a Runtime instance.
 Its application dependencies are `@agentshouse/mdruntime` at
-`0.1.0-alpha.2` and `@agentshouse/mdruntime-adapter` at `0.1.0-alpha.1`,
+`0.1.0-alpha.4` and `@agentshouse/mdruntime-adapter` at `0.1.0-alpha.1`,
 with published registry integrity in `package-lock.json`.
 The renderer uses exactly `micromark@4.0.2` and
 `micromark-extension-gfm@3.0.0` under the narrow
@@ -151,4 +152,52 @@ Number and date displays use the browser locale. Dates retain their ISO value
 without a local-timezone shift. App CSS may set `--md-color-scheme`,
 `--md-background`, `--md-surface`, `--md-text`, `--md-border`, `--md-focus`, and
 `--md-error` on a containing element. Browser acceptance is owned by
+[TESTING.md](docs/agents/TESTING.md#location-and-naming).
+
+## Document View
+
+`md-document-view` presents one Document of one Room for reading. The host
+binds the public Runtime:
+
+```html
+<md-document-view></md-document-view>
+```
+
+```js
+const view = document.querySelector('md-document-view');
+view.bind(runtime, 'studio', 'work/alpha.md');
+```
+
+`bind(runtime, room, path)` reads the Document through `runtime.query` and
+`runtime.observe('query')` with that Room and Path, and reads write grants and
+Provider-owned Paths from `runtime.observe('rooms')`. Typed fields render as
+the field controls of `components/01`, disabled. Text comes from the Query
+result: the preamble, declared sections in declared order, extra sections the
+Document carries, structured sections as lists through the renderer, and the
+whole text of an untyped Document. The backlinks panel lists Query-derived
+referrers in the same Room and navigates with `open-path`. The History panel
+calls `runtime.history` only after it is opened, then shows native author and
+time and requested revision content, or the declared absence. A missing write
+grant or a Provider-owned Path shows the reason and keeps every field control
+disabled. Editing, Drafts, and Save are not present.
+
+## Sync Status indicator
+
+`md-sync-status` is the one App Sync Status. It binds the public Runtime and
+reads `runtime.observe('sync-status')` only:
+
+```html
+<md-sync-status></md-sync-status>
+```
+
+```js
+document.querySelector('md-sync-status').bind(runtime);
+```
+
+It shows Pending, Syncing, or Synced, whether attention is required, the last
+completed synchronization time, and, while the Provider is unreachable, that
+changes remain Pending. It does not belong to one Room or Document.
+
+Both elements take the same CSS custom properties as the field controls, with
+browser light and dark defaults. Browser acceptance is owned by
 [TESTING.md](docs/agents/TESTING.md#location-and-naming).

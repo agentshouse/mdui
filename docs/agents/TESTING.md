@@ -111,10 +111,15 @@ Tests live at public seams, never against internals, and use `.spec.ts`:
 | `test/browser/` | Playwright: the App's DOM and its public MD Runtime integration                  |
 | `test/static/`  | Vitest `static` project: the dependency-cruiser command's acceptance and refusal |
 
-The browser specifications own App loading, the Markdown renderer, and field controls over the
+The browser specifications own App loading, the Markdown renderer, field
+controls, Document View, and the Sync Status indicator over the
 published in-memory Adapter. They exercise actual native interaction, value and
 validity events, same-Room reference choices, list updates, locale, visible
-focus, disabled states, and 360px light/dark layout. The renderer seam also
+focus, disabled states, and 360px light/dark layout. Document View covers Query
+text parts, Room-local backlinks, lazy History at the public Adapter fixture
+boundary, and visible refusal reasons. The indicator covers Observe states,
+attention, last completed synchronization, and Pending while unreachable.
+The renderer seam also
 accepts adversarial text directly through its public property, independently
 of Model collection validity; normal section input is read through Query.
 The pure lane qualifies the renderer dependencies against the
