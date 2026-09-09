@@ -1,6 +1,6 @@
 # 01-markdown-renderer-and-field-controls - Markdown renderer and field controls
 
-Status: blocked
+Status: ready-for-agent
 
 ## Frame
 
