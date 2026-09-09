@@ -92,7 +92,24 @@ export const viewStyles = `
     margin: 0 0 .75rem;
   }
   .reason:empty { display: none; }
-  .fields, .part, .panel { display: grid; gap: .5rem; min-width: 0; margin: 0 0 1rem; }
+  .fields, .part, .panel, .structure, .actions { display: grid; gap: .5rem; min-width: 0; margin: 0 0 1rem; }
+  textarea {
+    color: inherit;
+    font: inherit;
+    width: 100%;
+    min-width: 0;
+    min-height: 8rem;
+    border: 1px solid var(--md-border, light-dark(#74808c, #8b99a7));
+    border-radius: .35rem;
+    background: var(--md-surface, light-dark(#fff, #1d232b));
+    padding: .55rem .7rem;
+    resize: vertical;
+  }
+  .error, .current, .refusal { margin: 0; overflow-wrap: anywhere; }
+  .error, .refusal { color: var(--md-error, light-dark(#a32222, #ffb3ac)); }
+  .error:empty { display: none; }
+  .current { font-size: .875rem; }
+  .refusal { white-space: pre-wrap; margin: 0 0 .75rem; }
   button, summary {
     color: inherit;
     font: inherit;

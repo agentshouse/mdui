@@ -9,8 +9,9 @@ ES-module entry in `src/index.ts`; the entry loads the published MD Runtime
 and registers the field controls, Markdown renderer, Document View, and Sync
 Status indicator without creating a Runtime instance.
 Its application dependencies are `@agentshouse/mdruntime` at
-`0.1.0-alpha.4` and `@agentshouse/mdruntime-adapter` at `0.1.0-alpha.1`,
+`0.1.0-alpha.5` and `@agentshouse/mdruntime-adapter` at `0.1.0-alpha.1`,
 with published registry integrity in `package-lock.json`.
+The Runtime pin carries Model `0.1.0-alpha.5` and Query `0.1.0-alpha.2`.
 The renderer uses exactly `micromark@4.0.2` and
 `micromark-extension-gfm@3.0.0` under the narrow
 [User-approved dependency exception](docs/agents/renderer-dependency-approval.json).
@@ -156,8 +157,8 @@ without a local-timezone shift. App CSS may set `--md-color-scheme`,
 
 ## Document View
 
-`md-document-view` presents one Document of one Room for reading. The host
-binds the public Runtime:
+`md-document-view` presents one Document of one Room. The host binds the
+public Runtime:
 
 ```html
 <md-document-view></md-document-view>
@@ -166,21 +167,31 @@ binds the public Runtime:
 ```js
 const view = document.querySelector('md-document-view');
 view.bind(runtime, 'studio', 'work/alpha.md');
+await view.create(runtime, 'studio', 'work/created.md', 'item');
 ```
 
 `bind(runtime, room, path)` observes the Document through
-`runtime.observe('query')` with that Room and Path, and observes write grants
-and Provider-owned Paths from `runtime.observe('rooms')`. Typed fields render
-as the field controls of `components/01`, disabled. Text comes from the Query
-result: the preamble, declared sections in declared order, extra sections the
-Document carries, structured sections as lists through the renderer, and the
-whole text of an untyped Document. The backlinks panel lists Query-derived
-referrers in the same Room and navigates with `open-path`. The History panel
-calls `runtime.history` only after it is opened, then shows native author and
-time and requested revision content, or the declared absence. A later page is
-requested only when the user continues. A missing write grant or a
-Provider-owned Path shows the reason and keeps every field control disabled.
-Editing, Drafts, and Save are not present.
+`runtime.observe('query')` with that Room and Path, write grants and
+Provider-owned Paths from `runtime.observe('rooms')`, and that Room's queue
+from `runtime.observe('queue')`. Typed fields render as the field controls of
+`components/01`. Text comes from the Query result: the preamble, declared
+sections in declared order, extra sections the Document carries, structured
+sections as lists through the renderer, and the whole text of an untyped
+Document. The backlinks panel lists Query-derived referrers in the same Room
+and navigates with `open-path`. The History panel calls `runtime.history` only
+after it is opened, then shows native author and time and requested revision
+content, or the declared absence. A later page is requested only when the user
+continues.
+
+When the Path has a write grant and is not Provider-owned, field controls are
+enabled and section, preamble, and whole-text editors write only through
+`runtime.draft`. File Save calls `runtime.save` with structured changes from
+that Draft. `create` writes a typed create Draft at an absent Path. Rename,
+move, and removal are controls of the same Save. A missing write grant or a
+Provider-owned Path shows the reason, keeps field controls disabled, and
+omits editing controls. A Conflicted or Rejected head is restored from the
+queue into the Draft; Save names that head, and discard uses
+`runtime.queue.discard`.
 
 ## Sync Status indicator
 
