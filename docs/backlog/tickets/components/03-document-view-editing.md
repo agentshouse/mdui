@@ -1,6 +1,6 @@
 # 03-document-view-editing - Document View editing
 
-Status: blocked
+Status: ready-for-agent
 
 ## Frame
 
@@ -66,12 +66,13 @@ removing it.
 
 ## Mines
 
-Waits for
-[`runtime/05`](https://github.com/agentshouse/mdruntime/blob/main/docs/backlog/tickets/runtime/05-drafts-save-local-validation-and-change-batch-construction.md)
-and
-[`runtime/06`](https://github.com/agentshouse/mdruntime/blob/main/docs/backlog/tickets/runtime/06-submission-outcomes-and-the-queue.md)
-in `agentshouse/mdruntime`, which
-deliver Draft, Save, and the queue. Nothing is merged automatically. Editing
+`runtime/05` and `runtime/06` in `agentshouse/mdruntime` are merged, and
+Draft, Save, and queue support is published. The coordinator accepted the
+published granular Save evidence and Runtime alpha.5 durability follow-through
+under the User-delegated release authority; see the
+[prerequisite receipt](../../../agents/runtime-editing-prerequisite.json).
+Use the public `@agentshouse/mdruntime@0.1.0-alpha.5` package and its pinned
+Model alpha.5 / Query alpha.2 dependencies. Editing
 never creates a Change Batch before Save. A file without a write grant shows
 no editing control. The Draft is the MD Runtime's; the element restores it
 rather than keeping its own copy.
