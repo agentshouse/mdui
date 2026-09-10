@@ -36,19 +36,23 @@ async function mount(
     async ({ rooms, options }) => {
       const { createMdRuntime } = await import('@agentshouse/mdruntime');
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
+      const helper = '/src/testing.js';
+      const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
       const specifier = '/src/app.js';
       const { bindApp } = (await import(specifier)) as {
         bindApp: (runtime: MdRuntime) => () => void;
       };
       const controller = new AbortController();
-      const adapter = createMemoryAdapter({ rooms });
+      const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) });
       if (options.pending) adapter.script('mutate', { kind: 'transport-uncertainty' });
-      const runtime = createMdRuntime({
-        adapter,
-        requiredGuarantees: [],
-        signal: controller.signal,
-        discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
-      });
+      const runtime = createMdRuntime(
+        runtimeOptions({
+          adapter,
+          requiredGuarantees: [],
+          signal: controller.signal,
+          discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
+        }),
+      );
       const unbind = bindApp(runtime);
       const stops: Array<() => void> = [];
       window.workFixture = {
@@ -80,11 +84,11 @@ async function mount(
           }),
         );
       }
-      await new Promise<void>((resolve) => {
-        runtime.observe('rooms', (visible) => {
-          if (visible.length === 2 && visible.every((room) => room.roomVersion !== null)) resolve();
-        });
-      });
+      await waitForRooms(
+        runtime,
+        (visible: ReturnType<typeof runtime.rooms>) =>
+          visible.length === 2 && visible.every((room) => room.roomVersion !== null),
+      );
     },
     { rooms, options },
   );
@@ -503,15 +507,17 @@ test('Work keeps Drafts after remote removal and Room access loss without a Conn
   await expect(inventory(page)).toHaveText(expected);
   await page.evaluate(async (rooms) => {
     const { runtime, adapter } = window.workFixture;
+    const helper = '/src/testing.js';
+    const { fixtureRoom } = await import(helper);
     adapter.setRooms(
       rooms.map((room) =>
         room.locator === 'alpha'
-          ? {
+          ? fixtureRoom({
               ...room,
               roomVersion: 'v2',
               documents: { 'types/note.md': room.documents['types/note.md'] },
-            }
-          : room,
+            })
+          : fixtureRoom(room),
       ),
     );
     await runtime.reauthorize();

@@ -20,28 +20,33 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(async () => {
     const { createMdRuntime } = await import('@agentshouse/mdruntime');
     const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
+    const helper = '/src/testing.js';
+    const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
     const controller = new AbortController();
-    const runtime = createMdRuntime({
-      adapter: createMemoryAdapter({
-        rooms: [
-          {
-            name: 'Studio',
-            locator: 'studio',
-            roomVersion: 'v1',
-            writeGrants: [],
-            providerOwnedPaths: [],
-            documents: {
-              'types/note.md': '---\ntype: definition\nsections:\n  Body:\n    kind: text\n---\n',
-              'docs/readme.md':
-                '---\ntype: note\n---\n## Body\n# Shared note\n\n**Strong** and *gentle*, ~~removed~~ and `code`.\n\n| Topic | State |\n| --- | ---: |\n| Work | Ready |\n\n- [x] Finished\n- [ ] Next\n\n[Continue](next.md)\n',
-              'docs/next.md': '# Next\n',
-            },
+    const adapter = createMemoryAdapter({
+      rooms: [
+        fixtureRoom({
+          name: 'Studio',
+          locator: 'studio',
+          roomVersion: 'v1',
+          writeGrants: [],
+          providerOwnedPaths: [],
+          documents: {
+            'types/note.md': '---\ntype: definition\nsections:\n  Body:\n    kind: text\n---\n',
+            'docs/readme.md':
+              '---\ntype: note\n---\n## Body\n# Shared note\n\n**Strong** and *gentle*, ~~removed~~ and `code`.\n\n| Topic | State |\n| --- | ---: |\n| Work | Ready |\n\n- [x] Finished\n- [ ] Next\n\n[Continue](next.md)\n',
+            'docs/next.md': '# Next\n',
           },
-        ],
-      }),
-      requiredGuarantees: [],
-      signal: controller.signal,
+        }),
+      ],
     });
+    const runtime = createMdRuntime(
+      runtimeOptions({
+        adapter,
+        requiredGuarantees: [],
+        signal: controller.signal,
+      }),
+    );
     window.markdownFixture = {
       runtime,
       stop: () => controller.abort(),
@@ -49,10 +54,8 @@ test.beforeEach(async ({ page }) => {
       resources: [],
       external: [],
     };
-    await new Promise<void>((resolve) =>
-      runtime.observe('rooms', (rooms) => {
-        if (rooms.some((room) => room.roomVersion === 'v1')) resolve();
-      }),
+    await waitForRooms(runtime, (rooms: ReturnType<typeof runtime.rooms>) =>
+      rooms.some((room) => room.roomVersion === 'v1'),
     );
   });
 });

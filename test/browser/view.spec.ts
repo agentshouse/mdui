@@ -101,8 +101,10 @@ async function start(page: Page, rooms: unknown[], options: { history?: boolean 
     async ({ rooms, options }) => {
       const { createMdRuntime } = await import('@agentshouse/mdruntime');
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
+      const helper = '/src/testing.js';
+      const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
       const controller = new AbortController();
-      const adapter = createMemoryAdapter({ rooms: rooms as never });
+      const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) as never });
       const history: HistoryRequest[] = [];
       if (options.history) {
         adapter.script('history', (request: HistoryRequest) => {
@@ -120,12 +122,14 @@ async function start(page: Page, rooms: unknown[], options: { history?: boolean 
           };
         });
       }
-      const runtime = createMdRuntime({
-        adapter,
-        requiredGuarantees: [],
-        signal: controller.signal,
-        discoveryIntervalMs: 60_000,
-      });
+      const runtime = createMdRuntime(
+        runtimeOptions({
+          adapter,
+          requiredGuarantees: [],
+          signal: controller.signal,
+          discoveryIntervalMs: 60_000,
+        }),
+      );
       window.viewFixture = {
         runtime,
         adapter,
@@ -134,11 +138,9 @@ async function start(page: Page, rooms: unknown[], options: { history?: boolean 
         historyFails: false,
         stop: () => controller.abort(),
       };
-      await new Promise<void>((resolve) => {
-        runtime.observe('rooms', (visible) => {
-          if (visible.some((room) => room.roomVersion !== null)) resolve();
-        });
-      });
+      await waitForRooms(runtime, (visible: ReturnType<typeof runtime.rooms>) =>
+        visible.some((room) => room.roomVersion !== null),
+      );
     },
     { rooms, options },
   );

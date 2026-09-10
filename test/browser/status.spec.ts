@@ -37,14 +37,18 @@ async function start(page: Page) {
   await page.evaluate(async (room) => {
     const { createMdRuntime } = await import('@agentshouse/mdruntime');
     const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
+    const helper = '/src/testing.js';
+    const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
     const controller = new AbortController();
-    const adapter = createMemoryAdapter({ rooms: [room] });
-    const runtime = createMdRuntime({
-      adapter,
-      requiredGuarantees: [],
-      signal: controller.signal,
-      discoveryIntervalMs: 250,
-    });
+    const adapter = createMemoryAdapter({ rooms: [fixtureRoom(room)] });
+    const runtime = createMdRuntime(
+      runtimeOptions({
+        adapter,
+        requiredGuarantees: [],
+        signal: controller.signal,
+        discoveryIntervalMs: 250,
+      }),
+    );
     const seen: SyncStatus[] = [];
     runtime.observe('sync-status', (status) => seen.push(structuredClone(status)));
     window.statusFixture = {
@@ -57,11 +61,9 @@ async function start(page: Page) {
     const indicator = document.createElement('md-sync-status') as StatusElement;
     indicator.bind(runtime);
     document.body.replaceChildren(indicator);
-    await new Promise<void>((resolve) => {
-      runtime.observe('rooms', (visible) => {
-        if (visible.some((entry) => entry.roomVersion !== null)) resolve();
-      });
-    });
+    await waitForRooms(runtime, (visible: ReturnType<typeof runtime.rooms>) =>
+      visible.some((entry) => entry.roomVersion !== null),
+    );
   }, writable);
 }
 

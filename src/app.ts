@@ -8,6 +8,7 @@ import type {
   QueueEntry,
 } from '@agentshouse/mdruntime';
 import { appStyles } from './components/theme.js';
+import { mdTypes } from './components/runtime.js';
 import './components/status.js';
 import './components/view.js';
 
@@ -213,7 +214,7 @@ export function bindApp(runtime: MdRuntime): () => void {
   function presentRooms(rooms: readonly AppRoom[]): void {
     const content = rooms.map((room) => ({
       room,
-      types: runtime.types(room.locator),
+      types: mdTypes(runtime.types(room.locator)),
       paths: runtime.query({ selector: { room: room.locator } }).documents.map((file) => file.path),
     }));
     const snapshot = JSON.stringify(content);
@@ -366,7 +367,7 @@ export function bindApp(runtime: MdRuntime): () => void {
     event.preventDefault();
     resultsPart.replaceChildren();
     const types: MdType[] = [];
-    for (const room of runtime.rooms()) types.push(...runtime.types(room.locator));
+    for (const room of runtime.rooms()) types.push(...mdTypes(runtime.types(room.locator)));
     const text = String(new FormData(form).get('text') ?? '');
     for (const file of runtime.query({ selector: searchSelector(form, types) }).documents) {
       if (!matchesSearch(file, text)) continue;

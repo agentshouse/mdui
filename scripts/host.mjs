@@ -12,6 +12,8 @@ const input = {};
 for (const specifier of [
   ...Object.keys(dependencies),
   '@agentshouse/mdruntime/memory',
+  '@agentshouse/mdmodel',
+  '@agentshouse/query',
   'micromark-core-commonmark',
   'micromark-util-character',
   'micromark-util-sanitize-uri',

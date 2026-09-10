@@ -11,6 +11,7 @@ import type {
 } from '@agentshouse/mdruntime';
 import { type FieldControl, type FieldDefinition } from './fields.js';
 import { internalPath, relativePath } from './links.js';
+import { mdTypes } from './runtime.js';
 import './fields.js';
 import './markdown.js';
 import { viewStyles } from './theme.js';
@@ -124,7 +125,7 @@ function editorText(opened: string, live: string): string {
 function refusal(room: AppRoom | undefined, path: string): string {
   if (room === undefined) return '';
   if (covers(room.providerOwnedPaths, path)) return 'This Path is Provider-owned.';
-  if (!covers(room.writeGrants, path)) return 'This Path has no write grant.';
+  if (!covers(room.operations.write, path)) return 'This Path has no write grant.';
   return '';
 }
 
@@ -321,7 +322,7 @@ export class DocumentView extends HTMLElement {
   private definition(): MdType | undefined {
     const type = this.current?.type ?? this.draft?.create?.type;
     if (type === undefined || this.runtime === undefined) return;
-    return this.runtime.types(this.roomName()).find((entry) => entry.name === type);
+    return mdTypes(this.runtime.types(this.roomName())).find((entry) => entry.name === type);
   }
 
   private refusedHead(): QueueEntry | undefined {
@@ -632,7 +633,7 @@ export class DocumentView extends HTMLElement {
   private renderDocument(body: HTMLElement, file: QueryDocument): void {
     const runtime = this.runtime!;
     const room = file.room;
-    const definition = runtime.types(room).find((entry) => entry.name === file.type);
+    const definition = mdTypes(runtime.types(room)).find((entry) => entry.name === file.type);
     if (this.editor?.part === 'whole') {
       body.append(this.textPart(this.editor.name, this.editor.live, true, 'whole'));
       return;
