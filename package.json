@@ -8,7 +8,7 @@
     "ops": "node -- scripts/ops.mjs"
   },
   "dependencies": {
-    "@agentshouse/mdruntime": "0.1.0-alpha.4",
+    "@agentshouse/mdruntime": "0.1.0-alpha.6",
     "@agentshouse/mdruntime-adapter": "0.1.0-alpha.1",
     "micromark": "4.0.2",
     "micromark-extension-gfm": "3.0.0"

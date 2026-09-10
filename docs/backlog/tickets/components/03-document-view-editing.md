@@ -1,6 +1,6 @@
 # 03-document-view-editing - Document View editing
 
-Status: ready-for-agent
+Status: resolved
 
 ## Frame
 
@@ -34,13 +34,13 @@ removing it.
 
 ## Acceptance criteria
 
-- [ ] Editing a field, any existing section, or the preamble changes the
+- [x] Editing a field, any existing section, or the preamble changes the
       Draft only. Each section or preamble editor ends in Save or in cancel;
       cancel restores that text in the Draft exactly as it was when the
       editor opened, including whitespace, and preserves other Draft edits.
       Reloading or leaving and returning to the file restores the Draft;
       successful Save consumes it.
-- [ ] Save produces one set-field change per changed field, one
+- [x] Save produces one set-field change per changed field, one
       replace-section change per changed existing section, one preamble
       change when the preamble was edited, or one whole-file change after
       whole-text editing. Through the public Save surface, each field change
@@ -50,19 +50,19 @@ removing it.
       Unrelated content is unchanged. A local validation failure is shown at
       its control, section, or preamble editor with the rule named while the
       Draft stays.
-- [ ] The browser seam over the published in-memory Adapter edits both a
+- [x] The browser seam over the published in-memory Adapter edits both a
       section absent from its MD Type's declarations and the preamble,
       verifies their exact prior-text guarded changes on Save, and verifies
       editor cancel restores the opened text without a Change Batch.
-- [ ] Creating a file of a MD Type, renaming, moving, and removing it work
+- [x] Creating a file of a MD Type, renaming, moving, and removing it work
       as structural changes; a removal with incoming links is refused with
       every referring location shown as a link.
-- [ ] After Conflicted or Rejected the Draft reopens over the current file
+- [x] After Conflicted or Rejected the Draft reopens over the current file
       with the App Creator's values, marks each field, section, and preamble the
       Provider changed with the current value beside it, shows the refusal
       verbatim, and offers Save, which replaces the head through the Save
       surface, and discard through the queue surface.
-- [ ] There is no WYSIWYG editing; a list field is edited as one value.
+- [x] There is no WYSIWYG editing; a list field is edited as one value.
 
 ## Mines
 
@@ -71,8 +71,8 @@ Draft, Save, and queue support is published. The coordinator accepted the
 published granular Save evidence and Runtime alpha.5 durability follow-through
 under the User-delegated release authority; see the
 [prerequisite receipt](../../../agents/runtime-editing-prerequisite.json).
-Use the public `@agentshouse/mdruntime@0.1.0-alpha.5` package and its pinned
-Model alpha.5 / Query alpha.2 dependencies. Editing
+Use the public `@agentshouse/mdruntime@0.1.0-alpha.6` package and its pinned
+Model alpha.5 / Query alpha.3 dependencies. Editing
 never creates a Change Batch before Save. A file without a write grant shows
 no editing control. The Draft is the MD Runtime's; the element restores it
 rather than keeping its own copy.

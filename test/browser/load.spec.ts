@@ -64,6 +64,7 @@ test('loads the App source and reads Types and Query through the published in-me
       room: 'fixture',
       path: 'notes/hello.md',
       type: 'note',
+      content: '---\ntype: note\ntitle: Hello\n---\n## Body\nPublished packages.\n',
       fields: { type: 'note', title: 'Hello' },
       sections: { Body: 'Published packages.\n' },
       preamble: '',

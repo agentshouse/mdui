@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { HistoryResult, MdRuntime, QueryDocument } from '@agentshouse/mdruntime';
+import type {
+  HistoryResult,
+  MdRuntime,
+  MutationRequest,
+  QueryDocument,
+} from '@agentshouse/mdruntime';
 import type { MemoryAdapter } from '@agentshouse/mdruntime/memory';
 
 type DocumentViewElement = HTMLElement & {
@@ -26,6 +31,7 @@ declare global {
       history: HistoryRequest[];
       pendingHistory: PendingHistory[];
       historyFails: boolean;
+      submissions?: MutationRequest[];
       stop: () => void;
     };
   }
@@ -221,10 +227,11 @@ test('renders typed fields, preamble, declared extra and structured sections fro
   await expect(page.getByRole('textbox', { name: 'tags 2', exact: true })).toHaveValue('ui');
   for (const input of await page
     .locator('md-document-view')
+    .getByRole('region', { name: 'Fields' })
     .locator('input, textarea, select')
     .all())
-    await expect(input).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Add item', exact: true })).toBeDisabled();
+    await expect(input).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Add item', exact: true })).toBeEnabled();
   await expect(page.getByRole('region', { name: 'Preamble' })).toContainText(
     'Opening words before any heading.',
   );

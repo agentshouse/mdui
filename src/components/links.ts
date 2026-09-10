@@ -71,6 +71,20 @@ export function internalPath(
   return { path: segments.join('/'), ...(fragment === undefined ? {} : { fragment }) };
 }
 
+export function relativePath(fromFile: string, target: string): string {
+  const base = fromFile
+    .split('/')
+    .slice(0, -1)
+    .filter((part) => part !== '');
+  const parts = target.split('/').filter((part) => part !== '');
+  let shared = 0;
+  while (shared < base.length && shared < parts.length && base[shared] === parts[shared]) {
+    shared += 1;
+  }
+  const up = Array.from({ length: base.length - shared }, () => '..');
+  return [...up, ...parts.slice(shared)].join('/');
+}
+
 export function connectLinks(
   container: HTMLElement,
   room: string,
