@@ -6,5 +6,76 @@
     <title>MD UI</title>
     <script type="module" src="/src/index.js"></script>
   </head>
-  <body></body>
+  <body>
+    <template id="md-app">
+      <div id="app">
+        <header>
+          <nav aria-label="Screens">
+            <button type="button" data-screen="rooms" aria-current="page">Rooms</button>
+            <button type="button" data-screen="search">Search</button>
+            <button type="button" data-screen="file">File</button>
+            <button type="button" data-screen="work">Work</button>
+            <button type="button" data-screen="refusal">Refusal</button>
+            <button type="button" data-screen="storage">Storage</button>
+            <button type="button" data-screen="log">Log</button>
+          </nav>
+          <md-sync-status></md-sync-status>
+        </header>
+        <main>
+          <section data-screen="rooms" aria-labelledby="rooms-heading">
+            <h1 id="rooms-heading">Rooms</h1>
+            <div data-part="rooms"></div>
+          </section>
+          <section data-screen="search" hidden aria-labelledby="search-heading">
+            <h1 id="search-heading">Search</h1>
+            <form aria-label="Local Search">
+              <label>Find <input name="text" type="search" /></label>
+              <label
+                >Room
+                <select name="room"></select
+              ></label>
+              <label
+                >MD Type
+                <select name="type"></select
+              ></label>
+              <label
+                >Field
+                <select name="field"></select
+              ></label>
+              <label>Value <input name="value" /></label>
+              <button type="submit">Find files</button>
+            </form>
+            <ul data-part="results" aria-label="Search results"></ul>
+          </section>
+          <section data-screen="file" hidden aria-labelledby="file-heading">
+            <h1 id="file-heading">File</h1>
+            <md-document-view></md-document-view>
+          </section>
+          <section data-screen="work" hidden aria-labelledby="work-heading">
+            <h1 id="work-heading">Work</h1>
+            <h2>Drafts</h2>
+            <ul data-part="drafts" aria-label="Drafts"></ul>
+            <h2>Pending Changes</h2>
+            <div data-part="queues"></div>
+          </section>
+          <section data-screen="refusal" hidden aria-labelledby="refusal-heading">
+            <h1 id="refusal-heading">Refusal</h1>
+            <p data-part="refusal" role="status" aria-label="Connection Refusal">
+              No Connection Refusal
+            </p>
+            <button type="button" data-part="reauthorize" hidden>Re-authorize</button>
+          </section>
+          <section data-screen="storage" hidden aria-labelledby="storage-heading">
+            <h1 id="storage-heading">Storage</h1>
+            <p data-part="storage" role="status" aria-label="Storage">No storage loss.</p>
+          </section>
+          <section data-screen="log" hidden aria-labelledby="log-heading">
+            <h1 id="log-heading">Log</h1>
+            <pre data-part="log" role="region" aria-label="Synchronization log"></pre>
+            <button type="button" data-part="export">Export the synchronization log</button>
+          </section>
+        </main>
+      </div>
+    </template>
+  </body>
 </html>

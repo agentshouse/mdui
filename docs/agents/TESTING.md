@@ -112,10 +112,10 @@ Tests live at public seams, never against internals, and use `.spec.ts`:
 | `test/static/`  | Vitest `static` project: the dependency-cruiser command's acceptance and refusal |
 
 The browser specifications own App loading, the Markdown renderer, field
-controls, Document View, and the Sync Status indicator over the
-published in-memory Adapter. They exercise actual native interaction, value and
-validity events, same-Room reference choices, list updates, locale, visible
-focus, disabled states, and 360px light/dark layout. Document View covers Query
+controls, Document View, the Sync Status indicator, and the seven screens of
+main over the published in-memory Adapter. They exercise actual native
+interaction, value and validity events, same-Room reference choices, list
+updates, locale, visible focus, disabled states, and 360px light/dark layout. Document View covers Query
 text parts, Room-local backlinks, lazy History at the public Adapter fixture
 boundary, visible refusal reasons, Draft and Save through the public Runtime
 surfaces, in-progress editor Draft persistence, relative reference storage,
@@ -123,6 +123,11 @@ structural changes with whole-text, grant revocation, complete Markdown from
 Query `content`, exact whole-file Save and cancel, and a Conflicted or
 Rejected head. The indicator covers Observe states,
 attention, last completed synchronization, and Pending while unreachable.
+The screen seam covers Rooms with MD Types and file tree, File through
+Document View, Local Search narrowed by Room, MD Type, and one field value,
+Work Drafts and per-Room queues with Provider text, Connection Refusal with
+re-authorization, the storage-loss statement, and synchronization log export,
+plus keyboard focus, 360px and desktop layout, and light and dark themes.
 The renderer seam also
 accepts adversarial text directly through its public property, independently
 of Model collection validity; normal section input is read through Query.

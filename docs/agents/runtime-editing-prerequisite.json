@@ -21,9 +21,14 @@
     "registryReadback": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-registry-byte-readback/receipt.json"
   },
   "independentConsumer": {
-    "status": "pending",
-    "job": "job.20260910T001850Z.sjyGHX",
-    "admission": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/MDUI-CONSUMER-ADMISSION.md"
+    "status": "accepted",
+    "acceptedAt": "2026-09-10T00:25:09.047230+00:00",
+    "receipt": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-acceptance.json",
+    "historicalCheckpoint": {
+      "status": "pending",
+      "job": "job.20260910T001850Z.sjyGHX",
+      "admission": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/MDUI-CONSUMER-ADMISSION.md"
+    }
   },
   "priorAlpha5": {
     "runtimePackage": "@agentshouse/mdruntime@0.1.0-alpha.5",
@@ -39,20 +44,21 @@
     "runtimeAlpha4Acceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha4-release/root-acceptance.json",
     "runtimeAlpha5Acceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha5-release/root-final-acceptance.json",
     "runtimeAlpha6SourceAcceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-source-acceptance.json",
-    "runtimeAlpha6RegistryReadback": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-registry-byte-readback/receipt.json"
+    "runtimeAlpha6RegistryReadback": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-registry-byte-readback/receipt.json",
+    "runtimeAlpha6Acceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-acceptance.json"
   },
   "checkedSeams": [
     "Published Query includes preamble and undeclared sections",
     "Draft separate from Query and queue; exact prior-text guarded granular Save; consume Draft; reload durable queue and Draft",
     "Runtime06 required outcome fixes: Accepted waits for Refresh; conflicted/rejected queue handling; named local refusal;154pure/static and6browser full gate",
     "Runtime08 public alpha5 consumer: ten browser cases, concurrent Saves, same failed-Save Draft persistence, complete queue resume, truthful storage loss",
-    "Published QueryDocument.content is the complete Markdown of the visible local state; independent installed-package/browser consumer remains pending"
+    "Published QueryDocument.content is the complete Markdown of the visible local state; independent installed-package/browser consumer was pending at this checkpoint and is accepted by root-acceptance.json"
   ],
   "mduiReadingMerge": "e8d1513741ffd6997e91b6836256a667654ba6e7",
   "limits": [
     "This is prerequisite acceptance of published bytes for MDUI consumption, not independent Runtime consumer acceptance and not completion of MDUI editing ticket",
     "Memory Adapter browser proof; live House Adapter conformance remains separate",
-    "Independent Runtime installed-package/browser readback job.20260910T001850Z.sjyGHX is pending; Root owns that final gate",
+    "Independent Runtime installed-package/browser readback job.20260910T001850Z.sjyGHX was pending at this checkpoint; current status is accepted at runtime-alpha6-release/root-acceptance.json",
     "Constituent tests retain their actual candidate/version attribution; no claim every prior test was rerun on alpha6"
   ]
 }
