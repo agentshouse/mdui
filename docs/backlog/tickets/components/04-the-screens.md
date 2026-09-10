@@ -1,6 +1,6 @@
 # 04-the-screens - The screens of main
 
-Status: ready-for-agent
+Status: resolved
 
 ## Frame
 
@@ -22,23 +22,24 @@ they pin, nothing more.
 
 ## Acceptance criteria
 
-- [ ] Rooms lists every Room from the Rooms surface with its MD Types and
+- [x] Rooms lists every Room from the Rooms surface with its MD Types and
       file tree and opens any file in Document View; Search finds files
       through Local Search across all Rooms, narrowed by each of the three
       values.
-- [ ] Work lists the App Creator's Drafts across Rooms and each Room's
-      Pending Change queue with outcomes and the Provider's text; Refusal
-      shows the Connection Refusal with its reason and a re-authorization
-      control for a revoked authorization; Storage shows the storage-loss
-      statement; Log exports the synchronization log as text.
-- [ ] Every screen is operable from the keyboard with visible focus and
+- [x] Work lists the App Creator's Drafts across Rooms and each Room's
+      Pending Change queue with outcomes and the Provider's text.
+- [x] Refusal shows the Connection Refusal with its reason and a
+      re-authorization control for a revoked authorization; Storage shows
+      the storage-loss statement; Log exports the synchronization log as
+      text.
+- [x] Every screen is operable from the keyboard with visible focus and
       labelled controls, lays out at 360 pixels and on a desktop, uses
       English strings and locale formatting, and follows the light and dark
       themes.
-- [ ] The App depends on the two packages and nothing else, and the browser
+- [x] The App depends on the two packages and nothing else, and the browser
       lane serves its source without a bundle step; the static bundle build
       is `shipped-form/01`.
-- [ ] The screen seam runs end to end in the browser lane over the
+- [x] The screen seam runs end to end in the browser lane over the
       in-memory Adapter.
 
 ## Mines

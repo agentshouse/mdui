@@ -6,10 +6,11 @@ appears here only as a callout linking to its requirement, ADR, or PRD in
 
 The repository is one npm project. `src/index.html` loads the TypeScript
 ES-module entry in `src/index.ts`; the entry loads the published MD Runtime
-and registers the field controls, Markdown renderer, Document View, and Sync
-Status indicator without creating a Runtime instance.
+and registers the field controls, Markdown renderer, Document View, and the
+Sync Status indicator without creating a Runtime instance. It exports
+`bindApp` so a host can mount the seven screens from the HTML template.
 Its application dependencies are `@agentshouse/mdruntime` at
-`0.1.0-alpha.6` and `@agentshouse/mdruntime-adapter` at `0.1.0-alpha.1`,
+`0.1.0-alpha.7` and `@agentshouse/mdruntime-adapter` at `0.1.0-alpha.1`,
 with published registry integrity in `package-lock.json`.
 The Runtime pin carries Model `0.1.0-alpha.5` and Query `0.1.0-alpha.3`.
 The renderer uses exactly `micromark@4.0.2` and
@@ -215,3 +216,41 @@ changes remain Pending. It does not belong to one Room or Document.
 Both elements take the same CSS custom properties as the field controls, with
 browser light and dark defaults. Browser acceptance is owned by
 [TESTING.md](docs/agents/TESTING.md#location-and-naming).
+
+## Screens
+
+`src/index.html` holds the seven screens as plain HTML. `bindApp(runtime)`
+clones that template, binds the Sync Status indicator, and fills each screen
+from the public MD Runtime API only. Presentation State is which screen is
+shown and which file Document View is bound to.
+
+```js
+import { bindApp } from './app.js';
+bindApp(runtime);
+```
+
+| Screen  | Public surfaces                                                                                                                           |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Rooms   | `rooms` / `observe('rooms')`, `observe('query')`, `types`, and Query Paths for each Room's file tree; opening a file binds Document View  |
+| Search  | Local Query narrowed by Room, MD Type, and one typed field value; substring over Query section text and field values; a result opens File |
+| File    | existing Document View                                                                                                                    |
+| Work    | `draft.list()` / `observe('drafts')` for every durable Draft, and `observe('queue')` per Room with outcome kind and Provider text         |
+| Refusal | `observe('connection-refusal')`; `reauthorize` when `reauthorizationOffered`                                                              |
+| Storage | `observe('storage-loss')`                                                                                                                 |
+| Log     | `log()` shown as text and downloaded as `synchronization-log.txt`                                                                         |
+
+Work renders the complete public Draft snapshot by Room locator and Path,
+independently of Rooms and Query membership. Entering Work or retrying a failed
+read calls `draft.list()`; `observe('drafts')` updates the rendered inventory
+after committed changes. A failed read keeps the last rendered inventory and
+shows the error with a Retry Drafts control. A successful later snapshot clears
+that error. Draft read failure is separate from the Runtime's storage-loss
+statement. A durable Save refusal keeps the Document View's Draft visible and
+shows the returned rule without attempting another durable write.
+Rooms and Document View retain their controls when an observation repeats the
+rendered values, so unchanged notifications do not interrupt native typing or
+keyboard focus.
+
+The Sync Status indicator is in the header on every screen. The browser lane
+serves this source without a bundle; the static bundle remains
+`shipped-form/01`.

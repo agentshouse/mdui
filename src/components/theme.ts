@@ -150,3 +150,53 @@ export const statusStyles = `
   .state { font-weight: 600; }
   .attention { color: var(--md-error, light-dark(#a32222, #ffb3ac)); }
 `;
+
+export const appStyles = `
+  #app {
+    display: block;
+    min-width: 0;
+    color-scheme: var(--md-color-scheme, light dark);
+    background: var(--md-background, light-dark(#fff, #121820));
+    color: var(--md-text, light-dark(#20252b, #e8ebef));
+    font: 1rem/1.5 system-ui, sans-serif;
+    padding: .75rem;
+    overflow-wrap: anywhere;
+  }
+  #app * { box-sizing: border-box; }
+  #app header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    align-items: start;
+    margin-bottom: 1rem;
+  }
+  #app nav[aria-label='Screens'] { display: flex; flex-wrap: wrap; gap: .35rem; min-width: 0; }
+  #app h1 { font-size: 1.35rem; line-height: 1.25; margin: 0 0 .75rem; }
+  #app h2 { font-size: 1.1rem; line-height: 1.25; margin: 0 0 .5rem; }
+  #app h3 { font-size: 1rem; margin: .5rem 0 .35rem; }
+  #app p, #app pre { margin: 0 0 .75rem; }
+  #app pre {
+    white-space: pre-wrap;
+    background: var(--md-surface, light-dark(#fff, #1d232b));
+    border: 1px solid var(--md-border, light-dark(#74808c, #8b99a7));
+    border-radius: .35rem;
+    padding: .55rem .7rem;
+  }
+  #app ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+  #app ul ul { margin: .35rem 0 0 .75rem; }
+  #app article { min-width: 0; margin: 0 0 1rem; }
+  #app form { display: grid; gap: .5rem; margin: 0 0 1rem; }
+  #app label { display: grid; gap: .35rem; font-weight: 600; min-width: 0; }
+  #app input, #app select, #app button {
+    color: inherit;
+    font: inherit;
+    border: 1px solid var(--md-border, light-dark(#74808c, #8b99a7));
+    border-radius: .35rem;
+    background: var(--md-surface, light-dark(#fff, #1d232b));
+    padding: .55rem .7rem;
+    min-height: 2.75rem;
+    max-width: 100%;
+  }
+  #app input, #app select { width: 100%; min-width: 0; }
+  #app :focus-visible { outline: 3px solid var(--md-focus, light-dark(#1759bc, #92bbff)); outline-offset: 3px; }
+`;
