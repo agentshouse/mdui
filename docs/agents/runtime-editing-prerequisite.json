@@ -1,29 +1,29 @@
 {
-  "acceptedAt": "2026-09-09T21:51:56.283066+00:00",
-  "decision": "Consume published QueryDocument.content through Runtime alpha.6",
-  "authority": "/Users/executor/artifacts/0028-agentshouse-organization-queue/PUBLICATION-AUTHORIZATION.md",
-  "runtimePackage": "@agentshouse/mdruntime@0.1.0-alpha.6",
+  "acceptedAt": "2026-09-10T04:15:16.185809+00:00",
+  "decision": "Consume published QueryDocument.content and Draft inventory through Runtime alpha.7",
+  "authority": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha7-release/ROOT-PUBLIC-ACCEPTANCE.json",
+  "runtimePackage": "@agentshouse/mdruntime@0.1.0-alpha.7",
   "model": "@agentshouse/mdmodel@0.1.0-alpha.5",
   "query": "@agentshouse/query@0.1.0-alpha.3",
-  "runtimeSource": "4b48c7454ebb56092225804500ceef69d22f71b8",
-  "runtimeWorkflow": "https://github.com/agentshouse/mdruntime/actions/runs/34420421125",
-  "runtimeSHA256": "bcf12acdd1d302ea6e637e71480970b8612171c1a23ed0753b27c393b6837286",
-  "runtimeIntegrity": "sha512-gEsq7nvMt/J/bgCcPeMDCldvoRXBrnwrL0LC3RBOyRl1+rGARNPlDq9WbSHQuZ/3KJdvSmQelO4y3Qm2Q5Vwdw==",
+  "runtimeSource": "310b049ec5820ee08b37c4c8c454abd345413b00",
+  "runtimeWorkflow": "https://github.com/agentshouse/mdruntime/actions/runs/34435770815",
+  "runtimeSHA256": "e150c008a74082de1ec0c7f1b881b8d711f7dedc9bbc63b2157a141d720eb378",
+  "runtimeIntegrity": "sha512-6Nw3Ormh+9J89+pQivNLAC+ZM/Odv00ZJOU3B6d/2EKmC/+Akff8WzixFT0Xm/uzNd21jKfiG16eyj3BtsTGmQ==",
   "contentSurface": "QueryDocument.content",
   "source": {
     "status": "accepted",
-    "merged": "4b48c7454ebb56092225804500ceef69d22f71b8",
-    "receipt": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-source-acceptance.json"
+    "merged": "310b049ec5820ee08b37c4c8c454abd345413b00",
+    "receipt": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha7-release/ROOT-CANONICAL-BYTE-ACCEPTANCE.json"
   },
   "publication": {
     "status": "accepted",
-    "workflow": "https://github.com/agentshouse/mdruntime/actions/runs/34420421125",
-    "registryReadback": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-registry-byte-readback/receipt.json"
+    "workflow": "https://github.com/agentshouse/mdruntime/actions/runs/34435770815",
+    "registryReadback": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha7-release/registry-readback-preparation/complete-34435770815/receipt.json"
   },
   "independentConsumer": {
     "status": "accepted",
-    "acceptedAt": "2026-09-10T00:25:09.047230+00:00",
-    "receipt": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-acceptance.json"
+    "acceptedAt": "2026-09-10T04:15:16.185809+00:00",
+    "receipt": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha7-release/ROOT-PUBLIC-ACCEPTANCE.json"
   },
   "priorAlpha5": {
     "runtimePackage": "@agentshouse/mdruntime@0.1.0-alpha.5",
@@ -33,10 +33,14 @@
     "runtimeSHA256": "34e6ad805d816cac58b9042f9d25d36e67296967d1bde75798201bb2c7ab7e7a"
   },
   "evidence": {
-    "runtimeAlpha6SourceAcceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-source-acceptance.json",
-    "runtimeAlpha6RegistryReadback": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-registry-byte-readback/receipt.json",
-    "runtimeAlpha6Acceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-acceptance.json",
+    "runtimeAlpha7CanonicalByteAcceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha7-release/ROOT-CANONICAL-BYTE-ACCEPTANCE.json",
+    "runtimeAlpha7RegistryReadback": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha7-release/registry-readback-preparation/complete-34435770815/receipt.json",
+    "runtimeAlpha7PublicAcceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha7-release/ROOT-PUBLIC-ACCEPTANCE.json",
     "historicalCheckpoint": "/Users/executor/artifacts/0028-agentshouse-organization-queue/mdui-screens-04-delivery/reviews/historical-runtime-editing-prerequisite.json"
   },
-  "mduiReadingMerge": "e8d1513741ffd6997e91b6836256a667654ba6e7"
+  "mduiReadingMerge": "e8d1513741ffd6997e91b6836256a667654ba6e7",
+  "priorAlpha6": {
+    "runtimePackage": "@agentshouse/mdruntime@0.1.0-alpha.6",
+    "receipt": "/Users/executor/artifacts/0028-agentshouse-organization-queue/mdui-screens-04-delivery/alpha7-recovery/final/inputs/runtime-editing-prerequisite-alpha6.json"
+  }
 }
