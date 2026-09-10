@@ -348,15 +348,22 @@ export class DocumentView extends HTMLElement {
     const room = this.roomName();
     const path = this.filePath();
     this.draft = asDraft(this.runtime.draft.read(room, path));
+    let queried = false;
     const stopQuery = this.runtime.observe('query', { selector: { room, path } }, (result) => {
-      this.current = result.documents[0];
+      const current = result.documents[0];
+      if (queried && equal(this.current, current)) return;
+      queried = true;
+      this.current = current;
       this.present();
     });
     const stopRooms = this.runtime.observe('rooms', (rooms) => {
-      this.roomState = rooms.find((entry) => entry.locator === room);
+      const state = rooms.find((entry) => entry.locator === room);
+      if (equal(this.roomState, state)) return;
+      this.roomState = state;
       this.present();
     });
     const stopQueue = this.runtime.observe('queue', room, (entries) => {
+      if (equal(this.queue, entries)) return;
       this.queue = entries;
       void this.restoreRefused();
       this.present();
@@ -870,11 +877,14 @@ export class DocumentView extends HTMLElement {
       head === undefined ? undefined : head.batch.id,
     );
     if (result.outcome === 'refused') {
-      const retained = cloneDraft(snapshot);
-      delete retained.remove;
-      this.draft = draftEmpty(retained) ? null : retained;
-      if (this.draft === null) await this.keepDraft(null);
-      else await this.keepDraft(this.draft);
+      if (result.rule === 'durable-write') {
+        this.draft = snapshot;
+      } else {
+        const retained = cloneDraft(snapshot);
+        delete retained.remove;
+        this.draft = draftEmpty(retained) ? null : retained;
+        await this.keepDraft(this.draft);
+      }
       this.localRefusal = result;
       this.present();
       return;

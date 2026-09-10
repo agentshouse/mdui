@@ -365,6 +365,16 @@ test('Storage shows the Runtime storage-loss statement after durable state is ev
   await expect(page.getByRole('status', { name: 'Storage' })).toHaveText(
     'Unsynchronized Drafts and Pending Changes were lost.',
   );
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Work', exact: true })
+    .click();
+  await expect(
+    page.getByRole('list', { name: 'Drafts', exact: true }).getByRole('listitem'),
+  ).toHaveCount(0);
+  await expect(page.getByRole('status', { name: 'Draft inventory', exact: true })).toHaveText(
+    'No Drafts.',
+  );
 });
 
 test('Log shows and exports the Runtime synchronization log as text', async ({ page }) => {

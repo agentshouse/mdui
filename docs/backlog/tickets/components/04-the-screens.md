@@ -1,6 +1,6 @@
 # 04-the-screens - The screens of main
 
-Status: ready-for-agent
+Status: resolved
 
 ## Frame
 
@@ -26,7 +26,7 @@ they pin, nothing more.
       file tree and opens any file in Document View; Search finds files
       through Local Search across all Rooms, narrowed by each of the three
       values.
-- [ ] Work lists the App Creator's Drafts across Rooms and each Room's
+- [x] Work lists the App Creator's Drafts across Rooms and each Room's
       Pending Change queue with outcomes and the Provider's text.
 - [x] Refusal shows the Connection Refusal with its reason and a
       re-authorization control for a revoked authorization; Storage shows

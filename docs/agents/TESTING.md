@@ -127,10 +127,20 @@ The screen seam covers Rooms with MD Types and file tree, including the tree
 after a local structural Save while the Provider is unreachable, File through
 Document View, Local Search over section text and field values narrowed by
 Room, MD Type, and one field value including a number and an empty string,
-Work Drafts and per-Room queues with Provider text,
+Work's public Draft inventory and per-Room queues with Provider text,
 Connection Refusal with re-authorization, the storage-loss statement, and
 synchronization log export, plus keyboard operation of labelled screen
 controls, 360px and desktop layout, and light and dark themes.
+The Work specification exercises absent-Path creations, unchanged-Path content
+changes, remote removal and Room access loss, navigation and literal reload,
+same-tab and cross-tab Draft and queue convergence, Save consumption, and
+discard. Browser storage-operation exceptions exercise failed reads, writes,
+and Save without reading private stores. Read failure, keyboard retry, durable
+Save refusal, Pending batches, reopened Conflicted or Rejected Drafts, Accepted
+batch removal, and actual storage eviction have distinct assertions. This is
+public Runtime integration over the Memory Adapter, not live Building acceptance.
+Repeated unchanged Room notifications are observed while a native File field is
+being typed into; the field keeps its value and focus until the user commits it.
 The renderer seam also
 accepts adversarial text directly through its public property, independently
 of Model collection validity; normal section input is read through Query.

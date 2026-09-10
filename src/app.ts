@@ -1,6 +1,7 @@
 import type {
   AppRoom,
   ConnectionRefusal,
+  DraftEntry,
   MdRuntime,
   MdType,
   QueryDocument,
@@ -168,6 +169,8 @@ export function bindApp(runtime: MdRuntime): () => void {
   const roomsPart = app.querySelector('[data-part="rooms"]') as HTMLElement;
   const resultsPart = app.querySelector('[data-part="results"]') as HTMLElement;
   const draftsPart = app.querySelector('[data-part="drafts"]') as HTMLElement;
+  const draftsState = app.querySelector('[data-part="drafts-state"]') as HTMLElement;
+  const retryDrafts = app.querySelector('[data-part="retry-drafts"]') as HTMLButtonElement;
   const queuesPart = app.querySelector('[data-part="queues"]') as HTMLElement;
   const refusalPart = app.querySelector('[data-part="refusal"]') as HTMLElement;
   const reauthorize = app.querySelector('[data-part="reauthorize"]') as HTMLButtonElement;
@@ -181,6 +184,8 @@ export function bindApp(runtime: MdRuntime): () => void {
   const stops: Array<() => void> = [];
   let queueStops: Array<() => void> = [];
   let current: Screen = 'rooms';
+  let draftRead = 0;
+  let renderedRooms: string | undefined;
 
   function show(screen: Screen): void {
     current = screen;
@@ -193,7 +198,10 @@ export function bindApp(runtime: MdRuntime): () => void {
       if (button.dataset.screen === screen) button.setAttribute('aria-current', 'page');
       else button.removeAttribute('aria-current');
     }
-    if (screen === 'work') presentWork();
+    if (screen === 'work') {
+      void refreshDrafts();
+      presentQueues();
+    }
     if (screen === 'log') presentLog();
   }
 
@@ -203,8 +211,16 @@ export function bindApp(runtime: MdRuntime): () => void {
   }
 
   function presentRooms(rooms: readonly AppRoom[]): void {
+    const content = rooms.map((room) => ({
+      room,
+      types: runtime.types(room.locator),
+      paths: runtime.query({ selector: { room: room.locator } }).documents.map((file) => file.path),
+    }));
+    const snapshot = JSON.stringify(content);
+    if (snapshot === renderedRooms) return;
+    renderedRooms = snapshot;
     roomsPart.replaceChildren();
-    for (const room of rooms) {
+    for (const { room, types: definitions, paths } of content) {
       const article = document.createElement('article');
       article.setAttribute('aria-label', room.name);
       const heading = document.createElement('h2');
@@ -213,16 +229,13 @@ export function bindApp(runtime: MdRuntime): () => void {
       typesHeading.textContent = 'MD Types';
       const types = document.createElement('ul');
       types.setAttribute('aria-label', 'MD Types');
-      for (const type of runtime.types(room.locator)) {
+      for (const type of definitions) {
         const item = document.createElement('li');
         item.textContent = type.name;
         types.append(item);
       }
       const filesHeading = document.createElement('h3');
       filesHeading.textContent = 'Files';
-      const paths = runtime
-        .query({ selector: { room: room.locator } })
-        .documents.map((document) => document.path);
       article.append(
         heading,
         typesHeading,
@@ -234,8 +247,8 @@ export function bindApp(runtime: MdRuntime): () => void {
     }
     const types = new Map<string, MdType>();
     const fields = new Set<string>();
-    for (const room of rooms) {
-      for (const type of runtime.types(room.locator)) {
+    for (const { types: definitions } of content) {
+      for (const type of definitions) {
         types.set(type.name, type);
         for (const field of Object.keys(type.fields)) fields.add(field);
       }
@@ -254,16 +267,34 @@ export function bindApp(runtime: MdRuntime): () => void {
     fillSelect(fieldSelect, 'Any field', [...fields].sort());
   }
 
-  function presentWork(): void {
+  function presentDrafts(drafts: readonly DraftEntry[]): void {
     draftsPart.replaceChildren();
-    for (const room of runtime.rooms()) {
-      for (const file of runtime.query({ selector: { room: room.locator } }).documents) {
-        if (runtime.draft.read(room.locator, file.path) === null) continue;
-        const item = document.createElement('li');
-        item.textContent = `${room.locator} ${file.path}`;
-        draftsPart.append(item);
-      }
+    for (const draft of drafts) {
+      const item = document.createElement('li');
+      item.textContent = `${draft.locator} ${draft.path}`;
+      draftsPart.append(item);
     }
+    draftsState.textContent = drafts.length === 0 ? 'No Drafts.' : '';
+    retryDrafts.hidden = true;
+  }
+
+  async function refreshDrafts(): Promise<void> {
+    const requested = ++draftRead;
+    draftsState.textContent = 'Loading Drafts…';
+    retryDrafts.hidden = true;
+    try {
+      const drafts = await runtime.draft.list();
+      if (requested !== draftRead) return;
+      presentDrafts(drafts);
+    } catch (error) {
+      if (requested !== draftRead) return;
+      const reason = error instanceof Error ? error.message : String(error);
+      draftsState.textContent = `Drafts could not be read: ${reason}`;
+      retryDrafts.hidden = false;
+    }
+  }
+
+  function presentQueues(): void {
     queuesPart.replaceChildren();
     for (const room of runtime.rooms()) {
       const article = document.createElement('article');
@@ -296,7 +327,7 @@ export function bindApp(runtime: MdRuntime): () => void {
       queueStops.push(
         runtime.observe('queue', room.locator, (entries) => {
           queues.set(room.locator, entries);
-          if (current === 'work') presentWork();
+          if (current === 'work') presentQueues();
         }),
       );
     }
@@ -351,6 +382,9 @@ export function bindApp(runtime: MdRuntime): () => void {
   reauthorize.addEventListener('click', () => {
     void runtime.reauthorize();
   });
+  retryDrafts.addEventListener('click', () => {
+    void refreshDrafts();
+  });
   app.querySelector('[data-part="export"]')?.addEventListener('click', () => {
     const text = presentLog();
     const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
@@ -369,12 +403,18 @@ export function bindApp(runtime: MdRuntime): () => void {
     runtime.observe('rooms', (rooms) => {
       presentRooms(rooms);
       watchQueues(rooms);
-      if (current === 'work') presentWork();
+      if (current === 'work') presentQueues();
     }),
   );
   stops.push(
     runtime.observe('query', {}, () => {
       presentRooms(runtime.rooms());
+    }),
+  );
+  stops.push(
+    runtime.observe('drafts', (drafts) => {
+      draftRead += 1;
+      presentDrafts(drafts);
     }),
   );
   stops.push(runtime.observe('connection-refusal', presentRefusal));
@@ -386,6 +426,7 @@ export function bindApp(runtime: MdRuntime): () => void {
   );
 
   unbind = () => {
+    draftRead += 1;
     for (const stop of queueStops) stop();
     queueStops = [];
     for (const stop of stops) stop();
