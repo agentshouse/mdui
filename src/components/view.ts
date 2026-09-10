@@ -32,6 +32,7 @@ type Editor = {
   name: string;
   opened: string;
   live: string;
+  snapshot: FileDraft;
 };
 
 const ROOM_ROOT = 'room';
@@ -111,10 +112,13 @@ function overlayDraft(base: FileDraft, newer: FileDraft): FileDraft {
   };
 }
 
-function queryMarkdown(file: QueryDocument | undefined): string | undefined {
-  if (file === undefined || !('content' in file)) return;
-  const content = (file as QueryDocument & { content?: unknown }).content;
-  return typeof content === 'string' ? content : undefined;
+function editorText(opened: string, live: string): string {
+  if (live === opened) return opened;
+  const normalize = (value: string) => value.replace(/\r\n|\r/g, '\n');
+  if (normalize(live) === normalize(opened)) return opened;
+  const openedBreak = opened.includes('\r\n') ? '\r\n' : opened.includes('\r') ? '\r' : '\n';
+  if (openedBreak === '\n' || live.includes('\r')) return live;
+  return live.replace(/\n/g, openedBreak);
 }
 
 function refusal(room: AppRoom | undefined, path: string): string {
@@ -424,12 +428,9 @@ export class DocumentView extends HTMLElement {
     return this.draft?.preamble ?? this.current?.preamble ?? '';
   }
 
-  private displayedWhole(): string {
+  private displayedWhole(): string | undefined {
     if (this.draft?.whole !== undefined) return this.draft.whole;
-    const content = queryMarkdown(this.current);
-    if (content !== undefined) return content;
-    if (this.current?.type === 'any') return this.displayedPreamble();
-    return '';
+    return this.current?.content;
   }
 
   private refusalUnplaced(): boolean {
@@ -448,6 +449,8 @@ export class DocumentView extends HTMLElement {
     const file = this.current;
     const head = this.refusedHead();
     if (file === undefined || head === undefined) return marks;
+    if (head.batch.changes.some((change) => change.kind === 'replace' && change.path === file.path))
+      return marks;
     const priors = new Map<string, unknown>();
     for (const precondition of head.batch.preconditions) {
       if (!('path' in precondition) || precondition.path !== file.path) continue;
@@ -489,7 +492,11 @@ export class DocumentView extends HTMLElement {
 
   private present(): void {
     if (!this.writable() && this.editor !== undefined) {
-      const next = this.applyEditor(cloneDraft(this.draft), this.editor, this.editor.live);
+      const next = this.applyEditor(
+        cloneDraft(this.draft),
+        this.editor,
+        editorText(this.editor.opened, this.editor.live),
+      );
       this.editor = undefined;
       void this.keepDraft(draftEmpty(next) ? null : next);
     }
@@ -519,6 +526,16 @@ export class DocumentView extends HTMLElement {
     const head = this.refusedHead();
     if (head !== undefined && 'text' in head.outcome)
       panel.append(message('refusal', head.outcome.text));
+    if (
+      head !== undefined &&
+      'affected' in head.outcome &&
+      head.batch.changes.some(
+        (change) => change.kind === 'replace' && change.path === this.filePath(),
+      )
+    ) {
+      const provider = head.outcome.affected[this.filePath()];
+      if (typeof provider === 'string') panel.append(message('current', provider));
+    }
     if (this.localRefusal !== undefined && this.refusalUnplaced()) {
       panel.append(message('error', this.localRefusal.rule));
       if (this.localRefusal.referrers !== undefined)
@@ -561,7 +578,9 @@ export class DocumentView extends HTMLElement {
     if (this.current !== undefined && this.current.type !== 'any') {
       const whole = button('Edit whole text');
       whole.addEventListener('click', () => {
-        this.openEditor('whole', 'Whole text', this.displayedWhole());
+        const text = this.displayedWhole();
+        if (text === undefined) return;
+        this.openEditor('whole', 'Whole text', text);
       });
       actions.append(whole);
     }
@@ -613,8 +632,10 @@ export class DocumentView extends HTMLElement {
     }
     if (file.type === 'any') {
       const text = this.displayedWhole();
-      if (this.writable()) body.append(this.textPart('Document', text, true, 'whole'));
-      else body.append(this.markdown('Document', text));
+      if (text !== undefined) {
+        if (this.writable()) body.append(this.textPart('Document', text, true, 'whole'));
+        else body.append(this.markdown('Document', text));
+      }
     } else {
       if (definition !== undefined) body.append(this.fields(definition));
       body.append(this.textPart('Preamble', this.displayedPreamble(), this.writable(), 'preamble'));
@@ -738,24 +759,32 @@ export class DocumentView extends HTMLElement {
   private openEditor(part: Editor['part'], name: string, opened: string): void {
     if (this.editor !== undefined) {
       const previous = this.editor;
-      const retained = this.applyEditor(cloneDraft(this.draft), previous, previous.live);
+      const retained = this.applyEditor(
+        cloneDraft(this.draft),
+        previous,
+        editorText(previous.opened, previous.live),
+      );
       this.draft = retained;
       void this.keepDraft(retained);
     }
-    this.editor = { part, name, opened, live: opened };
+    this.editor = { part, name, opened, live: opened, snapshot: cloneDraft(this.draft) };
     this.present();
     this.root.querySelector('textarea')?.focus();
   }
 
   private persistEditor(): Promise<void> {
     if (this.editor === undefined) return Promise.resolve();
-    const next = this.applyEditor(cloneDraft(this.draft), this.editor, this.editor.live);
+    const next = this.applyEditor(
+      cloneDraft(this.draft),
+      this.editor,
+      editorText(this.editor.opened, this.editor.live),
+    );
     return this.keepDraft(next);
   }
 
   private async commitEditor(value?: string): Promise<void> {
     if (this.editor === undefined) return;
-    const text = value ?? this.editor.live;
+    const text = editorText(this.editor.opened, value ?? this.editor.live);
     const next = this.applyEditor(cloneDraft(this.draft), this.editor, text);
     this.editor = undefined;
     await this.keepDraft(next);
@@ -764,22 +793,7 @@ export class DocumentView extends HTMLElement {
 
   private async cancelEditor(): Promise<void> {
     if (this.editor === undefined) return;
-    const opened = this.editor.opened;
-    const part = this.editor.part;
-    const name = this.editor.name;
-    const next = cloneDraft(this.draft);
-    if (part === 'whole') {
-      if (opened === '') delete next.whole;
-      else next.whole = opened;
-    } else if (part === 'preamble') {
-      if (this.current !== undefined && opened === this.current.preamble) delete next.preamble;
-      else next.preamble = opened;
-    } else if (this.current !== undefined && opened === this.current.sections[name]) {
-      if (next.sections !== undefined) {
-        delete next.sections[name];
-        if (Object.keys(next.sections).length === 0) delete next.sections;
-      }
-    } else next.sections = { ...next.sections, [name]: opened };
+    const next = cloneDraft(this.editor.snapshot);
     this.editor = undefined;
     await this.keepDraft(draftEmpty(next) ? null : next);
     this.present();

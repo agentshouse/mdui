@@ -4,6 +4,7 @@ import type {
   ChangeBatch,
   HistoryResult,
   MdRuntime,
+  MutationRequest,
   QueryDocument,
   QueueEntry,
 } from '@agentshouse/mdruntime';
@@ -34,6 +35,7 @@ declare global {
       history: HistoryRequest[];
       pendingHistory: PendingHistory[];
       historyFails: boolean;
+      submissions?: MutationRequest[];
       stop: () => void;
     };
   }
@@ -81,6 +83,62 @@ title: Owned
 Provider maintains this Path.
 `;
 const plain = '# Whole text\n\nNo type and no sections.\n';
+const completeMarkdown = `---
+type:   project
+title:  Alpha
+amount: 12.5
+due: 2026-09-09
+stage: Ready
+owner: ../people/ada.md
+tags: [core, ui]
+---
+
+Opening words before any heading.\t${'  '}
+café — 漢字
+
+## Extra
+
+An additional existing section.
+
+## Summary
+
+The declared summary.
+
+## Steps
+
+- first
+- second
+`;
+const crlfMarkdown = completeMarkdown.replaceAll('\n', '\r\n');
+const crlfNoNewline = crlfMarkdown.endsWith('\r\n') ? crlfMarkdown.slice(0, -2) : crlfMarkdown;
+const untypedMany = `# One
+
+First body with a blank line.
+
+## Two
+
+Second body.
+`;
+const userWhole = `---
+type: project
+title: App Creator whole
+---
+
+App Creator complete Markdown.
+
+## Extra
+
+Kept extra.
+
+## Summary
+
+App Creator summary.
+
+## Steps
+
+- first
+- second
+`;
 const providerAlpha = `---
 type: project
 title: Provider title
@@ -157,7 +215,11 @@ async function start(
           ? {}
           : { providerLimits: options.providerLimits as never }),
       });
-      adapter.script('mutate', { kind: 'transport-uncertainty' });
+      const submissions: MutationRequest[] = [];
+      adapter.script('mutate', (request: MutationRequest) => {
+        submissions.push(request);
+        return { kind: 'transport-uncertainty' };
+      });
       const runtime = createMdRuntime({
         adapter,
         requiredGuarantees: [],
@@ -170,6 +232,7 @@ async function start(
         history: [],
         pendingHistory: [],
         historyFails: false,
+        submissions,
         stop: () => controller.abort(),
       };
       await new Promise<void>((resolve) => {
@@ -228,10 +291,29 @@ async function queueOf(
   });
 }
 
+async function submittedBatches(page: Page): Promise<ChangeBatch[]> {
+  return page.evaluate(() =>
+    (window.viewFixture.submissions ?? []).map((entry) => entry.changeBatch),
+  );
+}
+
 function documentSave(page: Page) {
   return page
     .getByRole('region', { name: 'Document' })
     .getByRole('button', { name: 'Save', exact: true });
+}
+
+function roomWith(
+  documents: Record<string, string>,
+  revisions: Record<string, string>,
+  writeGrants = studio.writeGrants,
+) {
+  return {
+    ...studio,
+    writeGrants,
+    documents: { ...studio.documents, ...documents },
+    revisions: { ...studio.revisions, ...revisions },
+  };
 }
 
 test('field edits write the Runtime Draft and Save one set-field change with the Query prior', async ({
@@ -1010,11 +1092,334 @@ test('a refused removal does not keep remove in the Draft over a later field Sav
   ]);
 });
 
-test('whole-text editor opens the complete Markdown from Query', async ({ page }) => {
+test('whole-text editor opens the complete Markdown from Query', async ({ page }, testInfo) => {
+  await start(page, [
+    roomWith({ 'work/complete.md': completeMarkdown }, { 'work/complete.md': 'rev-complete' }),
+  ]);
+  await mount(page, 'work/complete.md');
+  expect((await queried(page, 'work/complete.md')).content).toBe(completeMarkdown);
+  await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
+  const editor = page.getByRole('region', { name: 'Whole text' }).getByRole('textbox');
+  await expect(editor).toHaveValue(completeMarkdown);
+  await page.screenshot({
+    path: testInfo.outputPath('whole-text-before-fill.png'),
+    fullPage: true,
+  });
+  expect(await editor.inputValue()).toBe(completeMarkdown);
+  expect(await queueOf(page)).toEqual([]);
+});
+
+test('untyped whole-text is complete and restores a Draft including empty text without editor Save', async ({
+  page,
+}) => {
+  const room = roomWith({ 'notes/many.md': untypedMany }, { 'notes/many.md': 'rev-many' }, [
+    './work',
+    './people',
+    './notes',
+  ]);
+  await start(page, [room]);
+  await mount(page, 'notes/many.md');
+  expect((await queried(page, 'notes/many.md')).content).toBe(untypedMany);
+  await page
+    .getByRole('region', { name: 'Document' })
+    .nth(1)
+    .getByRole('button', { name: 'Edit Document' })
+    .click();
+  const editor = page
+    .getByRole('region', { name: 'Document' })
+    .nth(1)
+    .getByRole('textbox', { name: 'Document' });
+  await expect(editor).toHaveValue(untypedMany);
+  await editor.fill('typed whole draft');
+  await expect
+    .poll(async () => draftOf(page, 'notes/many.md'))
+    .toMatchObject({ whole: 'typed whole draft' });
+  expect(await queueOf(page)).toEqual([]);
+  expect((await queried(page, 'notes/many.md')).content).toBe(untypedMany);
+  await mount(page, 'work/alpha.md');
+  await mount(page, 'notes/many.md');
+  await expect(page.getByRole('region', { name: 'Document' }).nth(1)).toContainText(
+    'typed whole draft',
+  );
+  await page.evaluate(() => window.viewFixture.stop());
+  await start(page, [room]);
+  await mount(page, 'notes/many.md');
+  await expect(page.getByRole('region', { name: 'Document' }).nth(1)).toContainText(
+    'typed whole draft',
+  );
+  expect(await draftOf(page, 'notes/many.md')).toMatchObject({ whole: 'typed whole draft' });
+  expect((await queried(page, 'notes/many.md')).content).toBe(untypedMany);
+  expect(await queueOf(page)).toEqual([]);
+  await page
+    .getByRole('region', { name: 'Document' })
+    .nth(1)
+    .getByRole('button', { name: 'Edit Document' })
+    .click();
+  const restored = page
+    .getByRole('region', { name: 'Document' })
+    .nth(1)
+    .getByRole('textbox', { name: 'Document' });
+  await expect(restored).toHaveValue('typed whole draft');
+  await restored.fill('');
+  await expect.poll(async () => draftOf(page, 'notes/many.md')).toEqual({ whole: '' });
+  await mount(page, 'notes/many.md');
+  await page
+    .getByRole('region', { name: 'Document' })
+    .nth(1)
+    .getByRole('button', { name: 'Edit Document' })
+    .click();
+  await expect(
+    page
+      .getByRole('region', { name: 'Document' })
+      .nth(1)
+      .getByRole('textbox', { name: 'Document' }),
+  ).toHaveValue('');
+  expect((await queried(page, 'notes/many.md')).content).toBe(untypedMany);
+  expect(await queueOf(page)).toEqual([]);
+});
+
+test('whole-text cancel restores opened Draft presence and does not manufacture a replacement', async ({
+  page,
+}) => {
   await start(page, [studio]);
+  await mount(page, 'work/alpha.md');
+  await page.getByRole('textbox', { name: 'title', exact: true }).fill('Kept title');
+  await page.getByRole('textbox', { name: 'title', exact: true }).blur();
+  await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
+  const editor = page.getByRole('region', { name: 'Whole text' }).getByRole('textbox');
+  await expect(editor).toHaveValue(alpha);
+  await editor.fill('accidental whole');
+  await page
+    .getByRole('region', { name: 'Whole text' })
+    .getByRole('button', { name: 'Cancel Whole text' })
+    .click();
+  expect(await queueOf(page)).toEqual([]);
+  await expect
+    .poll(async () => draftOf(page, 'work/alpha.md'))
+    .toMatchObject({ fields: { title: 'Kept title' } });
+  const afterCancel = (await draftOf(page, 'work/alpha.md')) as { whole?: string };
+  expect(afterCancel.whole).toBeUndefined();
+  await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Whole text' }).getByRole('textbox')).toHaveValue(
+    alpha,
+  );
+  await page
+    .getByRole('region', { name: 'Whole text' })
+    .getByRole('button', { name: 'Cancel Whole text' })
+    .click();
+  expect(await draftOf(page, 'work/alpha.md')).toMatchObject({ fields: { title: 'Kept title' } });
+  expect(((await draftOf(page, 'work/alpha.md')) as { whole?: string }).whole).toBeUndefined();
+  await documentSave(page).click();
+  await expect.poll(async () => (await queueOf(page)).length).toBe(1);
+  expect((await queueOf(page))[0].changes.some((change) => change.kind === 'replace')).toBe(false);
+  expect((await queueOf(page))[0].changes).toEqual([
+    { kind: 'field', path: 'work/alpha.md', name: 'title', value: 'Kept title' },
+  ]);
+});
+
+test('whole-text cancel restores an explicit empty Draft and switching does not copy another editor', async ({
+  page,
+}) => {
+  await start(page, [studio]);
+  await mount(page, 'work/alpha.md');
+  await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
+  const whole = page.getByRole('region', { name: 'Whole text' }).getByRole('textbox');
+  await whole.fill('');
+  await page
+    .getByRole('region', { name: 'Whole text' })
+    .getByRole('button', { name: 'Save Whole text' })
+    .click();
+  await expect.poll(async () => draftOf(page, 'work/alpha.md')).toEqual({ whole: '' });
+  await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Whole text' }).getByRole('textbox')).toHaveValue(
+    '',
+  );
+  await page.getByRole('region', { name: 'Whole text' }).getByRole('textbox').fill('not empty');
+  await page
+    .getByRole('region', { name: 'Whole text' })
+    .getByRole('button', { name: 'Cancel Whole text' })
+    .click();
+  await expect.poll(async () => draftOf(page, 'work/alpha.md')).toEqual({ whole: '' });
+  expect(await queueOf(page)).toEqual([]);
+  await page
+    .getByRole('region', { name: 'Extra' })
+    .getByRole('button', { name: 'Edit Extra' })
+    .click();
+  await page
+    .getByRole('region', { name: 'Extra' })
+    .getByRole('textbox', { name: 'Extra' })
+    .fill('Extra in progress');
+  await expect
+    .poll(async () => draftOf(page, 'work/alpha.md'))
+    .toMatchObject({ whole: '', sections: { Extra: 'Extra in progress' } });
+  await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Whole text' }).getByRole('textbox')).toHaveValue(
+    '',
+  );
+  const switched = (await draftOf(page, 'work/alpha.md')) as {
+    whole?: string;
+    sections?: Record<string, string>;
+  };
+  expect(switched.whole).toBe('');
+  expect(switched.sections?.Extra).toBe('Extra in progress');
+});
+
+test('bounded whole-text edit Saves the exact replacement at queue and Adapter with Query overlay', async ({
+  page,
+}) => {
+  await start(page, [
+    roomWith({ 'work/complete.md': completeMarkdown }, { 'work/complete.md': 'rev-complete' }),
+  ]);
+  await mount(page, 'work/complete.md');
+  await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
+  const editor = page.getByRole('region', { name: 'Whole text' }).getByRole('textbox');
+  await expect(editor).toHaveValue(completeMarkdown);
+  const displayed = await editor.inputValue();
+  const edited = displayed.replace('The declared summary.', 'Edited summary.');
+  expect(edited).not.toBe(displayed);
+  await editor.fill(edited);
+  await page
+    .getByRole('region', { name: 'Whole text' })
+    .getByRole('button', { name: 'Save Whole text' })
+    .click();
+  expect(await queueOf(page)).toEqual([]);
+  await documentSave(page).click();
+  await expect.poll(async () => (await queueOf(page)).length).toBe(1);
+  const expected = completeMarkdown.replace('The declared summary.', 'Edited summary.');
+  const [batch] = await queueOf(page);
+  expect(batch.changes).toEqual([{ kind: 'replace', path: 'work/complete.md', content: expected }]);
+  expect(batch.preconditions).toEqual([
+    { kind: 'revision', path: 'work/complete.md', revision: 'rev-complete' },
+  ]);
+  const submitted = await submittedBatches(page);
+  expect(submitted.at(-1)?.changes).toEqual(batch.changes);
+  expect(submitted.at(-1)?.preconditions).toEqual(batch.preconditions);
+  expect((await queried(page, 'work/complete.md')).content).toBe(expected);
+  expect(await draftOf(page, 'work/complete.md')).toBeNull();
+});
+
+test('whole-text preserves CRLF and a missing final newline through cancel and Save', async ({
+  page,
+}) => {
+  await start(page, [roomWith({ 'work/crlf.md': crlfNoNewline }, { 'work/crlf.md': 'rev-crlf' })]);
+  await mount(page, 'work/crlf.md');
+  expect((await queried(page, 'work/crlf.md')).content).toBe(crlfNoNewline);
+  await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
+  const editor = page.getByRole('region', { name: 'Whole text' }).getByRole('textbox');
+  await expect(editor).toHaveValue(crlfNoNewline.replaceAll('\r\n', '\n'));
+  await page
+    .getByRole('region', { name: 'Whole text' })
+    .getByRole('button', { name: 'Cancel Whole text' })
+    .click();
+  expect(await draftOf(page, 'work/crlf.md')).toBeNull();
+  expect((await queried(page, 'work/crlf.md')).content).toBe(crlfNoNewline);
+  await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
+  const displayed = await editor.inputValue();
+  const edited = displayed.replace('The declared summary.', 'Edited summary.');
+  await editor.fill(edited);
+  await page
+    .getByRole('region', { name: 'Whole text' })
+    .getByRole('button', { name: 'Save Whole text' })
+    .click();
+  await documentSave(page).click();
+  await expect.poll(async () => (await queueOf(page)).length).toBe(1);
+  const expected = crlfNoNewline.replace('The declared summary.', 'Edited summary.');
+  expect(expected.includes('\r\n')).toBe(true);
+  expect(expected.endsWith('\n')).toBe(false);
+  const [batch] = await queueOf(page);
+  expect(batch.changes).toEqual([{ kind: 'replace', path: 'work/crlf.md', content: expected }]);
+  expect(batch.preconditions).toEqual([
+    { kind: 'revision', path: 'work/crlf.md', revision: 'rev-crlf' },
+  ]);
+  expect((await submittedBatches(page)).at(-1)?.changes).toEqual(batch.changes);
+  expect((await queried(page, 'work/crlf.md')).content).toBe(expected);
+});
+
+test('Conflicted whole replacement restores exact Markdown and shows affected Provider text', async ({
+  page,
+}) => {
+  await start(page, [studio], { discoveryIntervalMs: 80 });
+  await page.evaluate(
+    ({ text, content }) => {
+      let first = true;
+      window.viewFixture.adapter.script('mutate', (request: MutationRequest) => {
+        window.viewFixture.submissions?.push(request);
+        if (first) {
+          first = false;
+          return {
+            kind: 'conflicted' as const,
+            roomVersion: 'v2',
+            affected: { 'work/alpha.md': content },
+            text,
+          };
+        }
+        return { kind: 'transport-uncertainty' as const };
+      });
+    },
+    { text: refusalText, content: providerAlpha },
+  );
   await mount(page, 'work/alpha.md');
   await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Whole text' }).getByRole('textbox')).toHaveValue(
     alpha,
+  );
+  await page.getByRole('region', { name: 'Whole text' }).getByRole('textbox').fill(userWhole);
+  await page
+    .getByRole('region', { name: 'Whole text' })
+    .getByRole('button', { name: 'Save Whole text' })
+    .click();
+  await documentSave(page).click();
+  await expect.poll(async () => (await queueOf(page))[0]?.kind).toBe('conflicted');
+  await expect.poll(async () => draftOf(page, 'work/alpha.md')).toEqual({ whole: userWhole });
+  await expect(page.getByText(refusalText, { exact: true })).toBeVisible();
+  await expect(page.getByText(providerAlpha, { exact: true })).toBeVisible();
+  expect((await queried(page, 'work/alpha.md')).content).not.toBe(providerAlpha);
+  const submitted = (await submittedBatches(page)).at(-1);
+  expect(submitted?.changes).toEqual([
+    { kind: 'replace', path: 'work/alpha.md', content: userWhole },
+  ]);
+  const head = (await queueOf(page))[0].id;
+  await documentSave(page).click();
+  await expect.poll(async () => (await queueOf(page))[0]?.id !== head).toBe(true);
+  expect((await queueOf(page))[0].kind).toBe('pending');
+  await page.evaluate(
+    ({ text, content }) => {
+      window.viewFixture.adapter.script('mutate', (request: MutationRequest) => {
+        window.viewFixture.submissions?.push(request);
+        return {
+          kind: 'rejected' as const,
+          affected: { 'work/alpha.md': content },
+          text,
+        };
+      });
+    },
+    { text: refusalText, content: providerAlpha },
+  );
+  await expect.poll(async () => (await queueOf(page))[0]?.kind).toBe('rejected');
+  await page.getByRole('button', { name: 'Discard', exact: true }).click();
+  await expect.poll(async () => (await queueOf(page)).length).toBe(0);
+  expect(await draftOf(page, 'work/alpha.md')).toBeNull();
+});
+
+test('revoking the write grant while whole-text editor is open removes editing controls', async ({
+  page,
+}) => {
+  await start(page, [studio], { discoveryIntervalMs: 80 });
+  await mount(page, 'work/alpha.md');
+  await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Whole text' }).getByRole('textbox')).toBeVisible();
+  await page.evaluate(
+    (room) => {
+      window.viewFixture.adapter.setRooms([room as never]);
+    },
+    { ...studio, writeGrants: ['./people'] },
+  );
+  await expect
+    .poll(async () => page.getByText('This Path has no write grant.', { exact: true }).count())
+    .toBe(1);
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Edit/ })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Whole text' }).getByRole('textbox')).toHaveCount(
+    0,
   );
 });

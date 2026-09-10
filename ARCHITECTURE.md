@@ -9,9 +9,9 @@ ES-module entry in `src/index.ts`; the entry loads the published MD Runtime
 and registers the field controls, Markdown renderer, Document View, and Sync
 Status indicator without creating a Runtime instance.
 Its application dependencies are `@agentshouse/mdruntime` at
-`0.1.0-alpha.5` and `@agentshouse/mdruntime-adapter` at `0.1.0-alpha.1`,
+`0.1.0-alpha.6` and `@agentshouse/mdruntime-adapter` at `0.1.0-alpha.1`,
 with published registry integrity in `package-lock.json`.
-The Runtime pin carries Model `0.1.0-alpha.5` and Query `0.1.0-alpha.2`.
+The Runtime pin carries Model `0.1.0-alpha.5` and Query `0.1.0-alpha.3`.
 The renderer uses exactly `micromark@4.0.2` and
 `micromark-extension-gfm@3.0.0` under the narrow
 [User-approved dependency exception](docs/agents/renderer-dependency-approval.json).
@@ -186,9 +186,9 @@ continues.
 When the Path has a write grant and is not Provider-owned, field controls are
 enabled and section, preamble, and whole-text editors write only through
 `runtime.draft`, including in-progress textarea text. A whole-text editor opens
-`draft.whole` or the public Query document's complete Markdown when that result
-carries `content`. File Save calls `runtime.save` with structured changes from
-that Draft. `create` writes a typed create Draft at an absent Path. Rename,
+the durable `draft.whole` when that value is present, including empty text,
+otherwise the public Query document's complete Markdown. File Save calls
+`runtime.save` with structured changes from that Draft. `create` writes a typed create Draft at an absent Path. Rename,
 move, and removal are controls of the same Save. A missing write grant or a
 Provider-owned Path shows the reason, keeps field controls disabled, and
 omits editing controls. A Conflicted or Rejected head is restored from the
