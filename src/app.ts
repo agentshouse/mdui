@@ -3,6 +3,7 @@ import type {
   ConnectionRefusal,
   MdRuntime,
   MdType,
+  QueryDocument,
   QueueEntry,
 } from '@agentshouse/mdruntime';
 import { appStyles } from './components/theme.js';
@@ -34,10 +35,6 @@ const outcomes = {
 } as const;
 
 let unbind = () => {};
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 function addPath(nodes: TreeNode[], parts: readonly string[], full: string): void {
   const [head, ...rest] = parts;
@@ -97,9 +94,46 @@ function fillSelect(select: HTMLSelectElement, blank: string, entries: readonly 
   if ([...select.options].some((entry) => entry.value === selected)) select.value = selected;
 }
 
-function searchSelector(form: HTMLFormElement): Record<string, unknown> {
+function fieldKind(types: readonly MdType[], field: string, typeName: string): string | undefined {
+  const kinds = new Set<string>();
+  for (const type of types) {
+    if (typeName !== '' && type.name !== typeName) continue;
+    const definition = type.fields[field];
+    if (definition === null || typeof definition !== 'object' || !('kind' in definition)) continue;
+    const kind = (definition as { kind: unknown }).kind;
+    if (typeof kind === 'string') kinds.add(kind);
+  }
+  return kinds.size === 1 ? [...kinds][0] : undefined;
+}
+
+function fieldEquality(raw: string, kind: string | undefined): unknown {
+  if (kind === 'number' && raw !== '') {
+    const count = Number(raw);
+    if (Number.isFinite(count)) return count;
+  }
+  return raw;
+}
+
+function containsText(value: unknown, text: string): boolean {
+  if (typeof value === 'string') return value.includes(text);
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value).includes(text);
+  if (Array.isArray(value)) return value.some((item) => containsText(item, text));
+  return false;
+}
+
+function matchesSearch(file: QueryDocument, text: string): boolean {
+  if (text === '') return true;
+  for (const section of Object.values(file.sections)) {
+    if (section.includes(text)) return true;
+  }
+  for (const value of Object.values(file.fields)) {
+    if (containsText(value, text)) return true;
+  }
+  return false;
+}
+
+function searchSelector(form: HTMLFormElement, types: readonly MdType[]): Record<string, unknown> {
   const data = new FormData(form);
-  const text = String(data.get('text') ?? '');
   const room = String(data.get('room') ?? '');
   const type = String(data.get('type') ?? '');
   const field = String(data.get('field') ?? '');
@@ -107,8 +141,9 @@ function searchSelector(form: HTMLFormElement): Record<string, unknown> {
   const clauses: Record<string, unknown>[] = [];
   if (room !== '') clauses.push({ room });
   if (type !== '') clauses.push({ type });
-  if (field !== '' && value !== '') clauses.push({ [`fields.${field}`]: value });
-  if (text !== '') clauses.push({ content: { $regex: escapeRegex(text) } });
+  if (field !== '') {
+    clauses.push({ [`fields.${field}`]: fieldEquality(value, fieldKind(types, field, type)) });
+  }
   if (clauses.length === 0) return {};
   if (clauses.length === 1) return clauses[0]!;
   return { $and: clauses };
@@ -221,28 +256,11 @@ export function bindApp(runtime: MdRuntime): () => void {
 
   function presentWork(): void {
     draftsPart.replaceChildren();
-    const listed = new Set<string>();
     for (const room of runtime.rooms()) {
       for (const file of runtime.query({ selector: { room: room.locator } }).documents) {
         if (runtime.draft.read(room.locator, file.path) === null) continue;
-        const name = `${room.locator} ${file.path}`;
-        listed.add(name);
         const item = document.createElement('li');
-        item.textContent = name;
-        draftsPart.append(item);
-      }
-    }
-    const boundRoom = view.getAttribute('room');
-    const boundPath = view.getAttribute('path');
-    if (
-      boundRoom !== null &&
-      boundPath !== null &&
-      runtime.draft.read(boundRoom, boundPath) !== null
-    ) {
-      const name = `${boundRoom} ${boundPath}`;
-      if (!listed.has(name)) {
-        const item = document.createElement('li');
-        item.textContent = name;
+        item.textContent = `${room.locator} ${file.path}`;
         draftsPart.append(item);
       }
     }
@@ -316,7 +334,11 @@ export function bindApp(runtime: MdRuntime): () => void {
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     resultsPart.replaceChildren();
-    for (const file of runtime.query({ selector: searchSelector(form) }).documents) {
+    const types: MdType[] = [];
+    for (const room of runtime.rooms()) types.push(...runtime.types(room.locator));
+    const text = String(new FormData(form).get('text') ?? '');
+    for (const file of runtime.query({ selector: searchSelector(form, types) }).documents) {
+      if (!matchesSearch(file, text)) continue;
       const item = document.createElement('li');
       const button = document.createElement('button');
       button.type = 'button';
@@ -348,6 +370,11 @@ export function bindApp(runtime: MdRuntime): () => void {
       presentRooms(rooms);
       watchQueues(rooms);
       if (current === 'work') presentWork();
+    }),
+  );
+  stops.push(
+    runtime.observe('query', {}, () => {
+      presentRooms(runtime.rooms());
     }),
   );
   stops.push(runtime.observe('connection-refusal', presentRefusal));

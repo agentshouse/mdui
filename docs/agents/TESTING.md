@@ -123,11 +123,14 @@ structural changes with whole-text, grant revocation, complete Markdown from
 Query `content`, exact whole-file Save and cancel, and a Conflicted or
 Rejected head. The indicator covers Observe states,
 attention, last completed synchronization, and Pending while unreachable.
-The screen seam covers Rooms with MD Types and file tree, File through
-Document View, Local Search narrowed by Room, MD Type, and one field value,
-Work Drafts and per-Room queues with Provider text, Connection Refusal with
-re-authorization, the storage-loss statement, and synchronization log export,
-plus keyboard focus, 360px and desktop layout, and light and dark themes.
+The screen seam covers Rooms with MD Types and file tree, including the tree
+after a local structural Save while the Provider is unreachable, File through
+Document View, Local Search over section text and field values narrowed by
+Room, MD Type, and one field value including a number and an empty string,
+Work Drafts on Query-visible Paths and per-Room queues with Provider text,
+Connection Refusal with re-authorization, the storage-loss statement, and
+synchronization log export, plus keyboard operation of labelled screen
+controls, 360px and desktop layout, and light and dark themes.
 The renderer seam also
 accepts adversarial text directly through its public property, independently
 of Model collection validity; normal section input is read through Query.

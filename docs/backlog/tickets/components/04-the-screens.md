@@ -1,6 +1,6 @@
 # 04-the-screens - The screens of main
 
-Status: resolved
+Status: ready-for-agent
 
 ## Frame
 

@@ -1,6 +1,6 @@
 {
   "acceptedAt": "2026-09-09T21:51:56.283066+00:00",
-  "decision": "Lift the satisfied Runtime publication hold on MDUI components03; consume published QueryDocument.content through Runtime alpha.6",
+  "decision": "Consume published QueryDocument.content through Runtime alpha.6",
   "authority": "/Users/executor/artifacts/0028-agentshouse-organization-queue/PUBLICATION-AUTHORIZATION.md",
   "runtimePackage": "@agentshouse/mdruntime@0.1.0-alpha.6",
   "model": "@agentshouse/mdmodel@0.1.0-alpha.5",
@@ -23,12 +23,7 @@
   "independentConsumer": {
     "status": "accepted",
     "acceptedAt": "2026-09-10T00:25:09.047230+00:00",
-    "receipt": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-acceptance.json",
-    "historicalCheckpoint": {
-      "status": "pending",
-      "job": "job.20260910T001850Z.sjyGHX",
-      "admission": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/MDUI-CONSUMER-ADMISSION.md"
-    }
+    "receipt": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-acceptance.json"
   },
   "priorAlpha5": {
     "runtimePackage": "@agentshouse/mdruntime@0.1.0-alpha.5",
@@ -38,27 +33,10 @@
     "runtimeSHA256": "34e6ad805d816cac58b9042f9d25d36e67296967d1bde75798201bb2c7ab7e7a"
   },
   "evidence": {
-    "runtime05": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-05-delivery/decision/master-accepted-release.json",
-    "runtime06": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-06-delivery/STATUS.txt",
-    "publishedGranularSave": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha4-release/save-independent-34400750193-3/result.json",
-    "runtimeAlpha4Acceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha4-release/root-acceptance.json",
-    "runtimeAlpha5Acceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha5-release/root-final-acceptance.json",
     "runtimeAlpha6SourceAcceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-source-acceptance.json",
     "runtimeAlpha6RegistryReadback": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-registry-byte-readback/receipt.json",
-    "runtimeAlpha6Acceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-acceptance.json"
+    "runtimeAlpha6Acceptance": "/Users/executor/artifacts/0028-agentshouse-organization-queue/runtime-alpha6-release/root-acceptance.json",
+    "historicalCheckpoint": "/Users/executor/artifacts/0028-agentshouse-organization-queue/mdui-screens-04-delivery/reviews/historical-runtime-editing-prerequisite.json"
   },
-  "checkedSeams": [
-    "Published Query includes preamble and undeclared sections",
-    "Draft separate from Query and queue; exact prior-text guarded granular Save; consume Draft; reload durable queue and Draft",
-    "Runtime06 required outcome fixes: Accepted waits for Refresh; conflicted/rejected queue handling; named local refusal;154pure/static and6browser full gate",
-    "Runtime08 public alpha5 consumer: ten browser cases, concurrent Saves, same failed-Save Draft persistence, complete queue resume, truthful storage loss",
-    "Published QueryDocument.content is the complete Markdown of the visible local state; independent installed-package/browser consumer was pending at this checkpoint and is accepted by root-acceptance.json"
-  ],
-  "mduiReadingMerge": "e8d1513741ffd6997e91b6836256a667654ba6e7",
-  "limits": [
-    "This is prerequisite acceptance of published bytes for MDUI consumption, not independent Runtime consumer acceptance and not completion of MDUI editing ticket",
-    "Memory Adapter browser proof; live House Adapter conformance remains separate",
-    "Independent Runtime installed-package/browser readback job.20260910T001850Z.sjyGHX was pending at this checkpoint; current status is accepted at runtime-alpha6-release/root-acceptance.json",
-    "Constituent tests retain their actual candidate/version attribution; no claim every prior test was rerun on alpha6"
-  ]
+  "mduiReadingMerge": "e8d1513741ffd6997e91b6836256a667654ba6e7"
 }

@@ -6,9 +6,9 @@ appears here only as a callout linking to its requirement, ADR, or PRD in
 
 The repository is one npm project. `src/index.html` loads the TypeScript
 ES-module entry in `src/index.ts`; the entry loads the published MD Runtime
-and registers the field controls, Markdown renderer, Document View, the Sync
-Status indicator, and the seven screens of main without creating a Runtime
-instance. The host binds the App with `bindApp(runtime)`.
+and registers the field controls, Markdown renderer, Document View, and the
+Sync Status indicator without creating a Runtime instance. It exports
+`bindApp` so a host can mount the seven screens from the HTML template.
 Its application dependencies are `@agentshouse/mdruntime` at
 `0.1.0-alpha.6` and `@agentshouse/mdruntime-adapter` at `0.1.0-alpha.1`,
 with published registry integrity in `package-lock.json`.
@@ -229,15 +229,15 @@ import { bindApp } from './app.js';
 bindApp(runtime);
 ```
 
-| Screen  | Public surfaces                                                                                                       |
-| ------- | --------------------------------------------------------------------------------------------------------------------- |
-| Rooms   | `rooms` / `observe('rooms')`, `types`, `query` for each Room's file tree; opening a file binds Document View          |
-| Search  | Local Query over `content` with Room, MD Type, and one field-value clauses; a result opens File                       |
-| File    | existing Document View                                                                                                |
-| Work    | `draft.read` on Query-visible Paths across Rooms, and `observe('queue')` per Room with outcome kind and Provider text |
-| Refusal | `observe('connection-refusal')`; `reauthorize` when `reauthorizationOffered`                                          |
-| Storage | `observe('storage-loss')`                                                                                             |
-| Log     | `log()` shown as text and downloaded as `synchronization-log.txt`                                                     |
+| Screen  | Public surfaces                                                                                                                                              |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Rooms   | `rooms` / `observe('rooms')`, `observe('query')`, `types`, and Query Paths for each Room's file tree; opening a file binds Document View                     |
+| Search  | Local Query narrowed by Room, MD Type, and one typed field value; substring over Query section text and field values; a result opens File                    |
+| File    | existing Document View                                                                                                                                       |
+| Work    | `draft.read` on Paths Query currently returns, and `observe('queue')` per Room with outcome kind and Provider text. Public Runtime has no Drafts enumeration |
+| Refusal | `observe('connection-refusal')`; `reauthorize` when `reauthorizationOffered`                                                                                 |
+| Storage | `observe('storage-loss')`                                                                                                                                    |
+| Log     | `log()` shown as text and downloaded as `synchronization-log.txt`                                                                                            |
 
 The Sync Status indicator is in the header on every screen. The browser lane
 serves this source without a bundle; the static bundle remains
