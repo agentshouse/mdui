@@ -15,36 +15,36 @@ test('loads the App source and reads Types and Query through the published in-me
   const visible = await page.evaluate(async () => {
     const { createMdRuntime } = await import('@agentshouse/mdruntime');
     const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
+    const helper = '/src/testing.js';
+    const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
     const controller = new AbortController();
     try {
-      const runtime = createMdRuntime({
-        adapter: createMemoryAdapter({
-          rooms: [
-            {
-              name: 'Fixture',
-              locator: 'fixture',
-              roomVersion: 'v1',
-              writeGrants: [],
-              providerOwnedPaths: [],
-              documents: {
-                'types/note.md':
-                  '---\ntype: definition\nfields:\n  title:\n    kind: string\nsections:\n  Body:\n    kind: text\n---\n',
-                'notes/hello.md':
-                  '---\ntype: note\ntitle: Hello\n---\n## Body\nPublished packages.\n',
-              },
+      const adapter = createMemoryAdapter({
+        rooms: [
+          fixtureRoom({
+            name: 'Fixture',
+            locator: 'fixture',
+            roomVersion: 'v1',
+            writeGrants: [],
+            providerOwnedPaths: [],
+            documents: {
+              'types/note.md':
+                '---\ntype: definition\nfields:\n  title:\n    kind: string\nsections:\n  Body:\n    kind: text\n---\n',
+              'notes/hello.md':
+                '---\ntype: note\ntitle: Hello\n---\n## Body\nPublished packages.\n',
             },
-          ],
-        }),
-        requiredGuarantees: [],
-        signal: controller.signal,
+          }),
+        ],
       });
-      await new Promise<void>((resolve) => {
-        runtime.observe('rooms', (visible) => {
-          if (visible.some((room) => room.roomVersion === 'v1')) resolve();
-        });
-      });
+      const runtime = createMdRuntime(
+        runtimeOptions({ adapter, requiredGuarantees: [], signal: controller.signal }),
+      );
+      await waitForRooms(runtime, (rooms: ReturnType<typeof runtime.rooms>) =>
+        rooms.some((room) => room.roomVersion === 'v1'),
+      );
+      const types = runtime.types('fixture');
       return {
-        types: runtime.types('fixture'),
+        types: types.status === 'unavailable' ? [] : types.types,
         query: runtime.query({ selector: { room: 'fixture', type: 'note' } }),
       };
     } finally {

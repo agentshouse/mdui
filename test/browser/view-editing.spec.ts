@@ -208,9 +208,11 @@ async function start(
     async ({ rooms, options }) => {
       const { createMdRuntime } = await import('@agentshouse/mdruntime');
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
+      const helper = '/src/testing.js';
+      const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
       const controller = new AbortController();
       const adapter = createMemoryAdapter({
-        rooms: rooms as never,
+        rooms: rooms.map(fixtureRoom) as never,
         ...(options.providerLimits === undefined
           ? {}
           : { providerLimits: options.providerLimits as never }),
@@ -220,12 +222,14 @@ async function start(
         submissions.push(request);
         return { kind: 'transport-uncertainty' };
       });
-      const runtime = createMdRuntime({
-        adapter,
-        requiredGuarantees: [],
-        signal: controller.signal,
-        discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
-      });
+      const runtime = createMdRuntime(
+        runtimeOptions({
+          adapter,
+          requiredGuarantees: [],
+          signal: controller.signal,
+          discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
+        }),
+      );
       window.viewFixture = {
         runtime,
         adapter,
@@ -235,11 +239,9 @@ async function start(
         submissions,
         stop: () => controller.abort(),
       };
-      await new Promise<void>((resolve) => {
-        runtime.observe('rooms', (visible) => {
-          if (visible.some((room) => room.roomVersion !== null)) resolve();
-        });
-      });
+      await waitForRooms(runtime, (visible: ReturnType<typeof runtime.rooms>) =>
+        visible.some((room) => room.roomVersion !== null),
+      );
     },
     { rooms, options },
   );
@@ -677,8 +679,10 @@ test('Conflicted head restores App Creator values, marks Provider current parts,
   await documentSave(page).click();
   await expect.poll(async () => (await queueOf(page))[0]?.kind).toBe('conflicted');
   await page.evaluate(
-    (room) => {
-      window.viewFixture.adapter.setRooms([room as never]);
+    async (room) => {
+      const helper = '/src/testing.js';
+      const { fixtureRoom } = await import(helper);
+      window.viewFixture.adapter.setRooms([fixtureRoom(room) as never]);
     },
     {
       ...studio,
@@ -842,8 +846,10 @@ test('Conflicted marks only Provider-changed parts including ones the App Creato
   await documentSave(page).click();
   await expect.poll(async () => (await queueOf(page))[0]?.kind).toBe('conflicted');
   await page.evaluate(
-    (room) => {
-      window.viewFixture.adapter.setRooms([room as never]);
+    async (room) => {
+      const helper = '/src/testing.js';
+      const { fixtureRoom } = await import(helper);
+      window.viewFixture.adapter.setRooms([fixtureRoom(room) as never]);
     },
     {
       ...studio,
@@ -887,8 +893,10 @@ test('revoking the write grant while a section editor is open removes editing co
     page.getByRole('region', { name: 'Extra' }).getByRole('textbox', { name: 'Extra' }),
   ).toBeVisible();
   await page.evaluate(
-    (room) => {
-      window.viewFixture.adapter.setRooms([room as never]);
+    async (room) => {
+      const helper = '/src/testing.js';
+      const { fixtureRoom } = await import(helper);
+      window.viewFixture.adapter.setRooms([fixtureRoom(room) as never]);
     },
     { ...studio, writeGrants: ['./people'] },
   );
@@ -1409,8 +1417,10 @@ test('revoking the write grant while whole-text editor is open removes editing c
   await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Whole text' }).getByRole('textbox')).toBeVisible();
   await page.evaluate(
-    (room) => {
-      window.viewFixture.adapter.setRooms([room as never]);
+    async (room) => {
+      const helper = '/src/testing.js';
+      const { fixtureRoom } = await import(helper);
+      window.viewFixture.adapter.setRooms([fixtureRoom(room) as never]);
     },
     { ...studio, writeGrants: ['./people'] },
   );

@@ -1,5 +1,6 @@
 import type { MdRuntime, QueryOptions } from '@agentshouse/mdruntime';
 import { fieldStyles } from './theme.js';
+import { mdTypes } from './runtime.js';
 
 export type FieldDefinition = {
   kind: string;
@@ -37,9 +38,9 @@ export abstract class FieldControl extends HTMLElement {
   abstract get validity(): FieldValidity;
 
   bind(runtime: MdRuntime, room: string, type: string, field: string): void {
-    const definition = runtime.types(room).find((entry) => entry.name === type)?.fields[field] as
-      | FieldDefinition
-      | undefined;
+    const definition = mdTypes(runtime.types(room)).find((entry) => entry.name === type)?.fields[
+      field
+    ] as FieldDefinition | undefined;
     this[configure](runtime, room, field, definition);
   }
 

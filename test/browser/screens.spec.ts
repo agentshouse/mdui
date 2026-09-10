@@ -60,18 +60,22 @@ async function start(
     async ({ rooms, options }) => {
       const { createMdRuntime } = await import('@agentshouse/mdruntime');
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
+      const helper = '/src/testing.js';
+      const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
       const specifier = '/src/app.js';
       const { bindApp } = (await import(specifier)) as {
         bindApp: (runtime: MdRuntime) => () => void;
       };
       const controller = new AbortController();
-      const adapter = createMemoryAdapter({ rooms: rooms as never });
-      const runtime = createMdRuntime({
-        adapter,
-        requiredGuarantees: options.requiredGuarantees ?? [],
-        signal: controller.signal,
-        discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
-      });
+      const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) as never });
+      const runtime = createMdRuntime(
+        runtimeOptions({
+          adapter,
+          requiredGuarantees: options.requiredGuarantees ?? [],
+          signal: controller.signal,
+          discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
+        }),
+      );
       window.screensFixture = {
         runtime,
         adapter,
@@ -79,12 +83,11 @@ async function start(
       };
       bindApp(runtime);
       if ((options.requiredGuarantees ?? []).length > 0) return;
-      await new Promise<void>((resolve) => {
-        runtime.observe('rooms', (visible) => {
-          if (visible.length === rooms.length && visible.every((room) => room.roomVersion !== null))
-            resolve();
-        });
-      });
+      await waitForRooms(
+        runtime,
+        (visible: ReturnType<typeof runtime.rooms>) =>
+          visible.length === rooms.length && visible.every((room) => room.roomVersion !== null),
+      );
     },
     { rooms, options },
   );
@@ -337,24 +340,24 @@ test('Storage shows the Runtime storage-loss statement after durable state is ev
       );
       const { createMdRuntime } = await import('@agentshouse/mdruntime');
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
+      const helper = '/src/testing.js';
+      const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
       const specifier = '/src/app.js';
       const { bindApp } = (await import(specifier)) as {
         bindApp: (runtime: MdRuntime) => () => void;
       };
       const controller = new AbortController();
-      const adapter = createMemoryAdapter({ rooms: rooms as never });
-      const runtime = createMdRuntime({
-        adapter,
-        requiredGuarantees: [],
-        signal: controller.signal,
-      });
+      const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) as never });
+      const runtime = createMdRuntime(
+        runtimeOptions({ adapter, requiredGuarantees: [], signal: controller.signal }),
+      );
       window.screensFixture = { runtime, adapter, stop: () => controller.abort() };
       bindApp(runtime);
-      await new Promise<void>((resolve) => {
-        runtime.observe('rooms', (visible) => {
-          if (visible.length === 2 && visible.every((room) => room.roomVersion !== null)) resolve();
-        });
-      });
+      await waitForRooms(
+        runtime,
+        (visible: ReturnType<typeof runtime.rooms>) =>
+          visible.length === 2 && visible.every((room) => room.roomVersion !== null),
+      );
     },
     [studio, archive],
   );

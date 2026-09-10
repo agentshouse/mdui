@@ -17,48 +17,53 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(async () => {
     const { createMdRuntime } = await import('@agentshouse/mdruntime');
     const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
+    const helper = '/src/testing.js';
+    const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
     const controller = new AbortController();
     const person = '---\ntype: definition\nfields:\n  name:\n    kind: string\n---\n';
+    const adapter = createMemoryAdapter({
+      rooms: [
+        fixtureRoom({
+          name: 'Studio',
+          locator: 'studio',
+          roomVersion: 'v1',
+          writeGrants: [],
+          providerOwnedPaths: [],
+          documents: {
+            'types/person.md': person,
+            'types/project.md':
+              '---\ntype: definition\nfields:\n  title:\n    kind: string\n    required: true\n  amount:\n    kind: number\n  due:\n    kind: date\n  stage:\n    kind: enum\n    values: [Draft, Ready]\n  owner:\n    kind: reference\n    to: person\n  tags:\n    kind: list\n    of: string\n  amounts:\n    kind: list\n    of: number\n  dates:\n    kind: list\n    of: date\n  stages:\n    kind: list\n    of: enum\n    values: [Draft, Ready]\n  owners:\n    kind: list\n    of: reference\n    to: person\n---\n',
+            'people/ada.md': '---\ntype: person\nname: Ada\n---\n',
+            'people/lin.md': '---\ntype: person\nname: Lin\n---\n',
+            'notes.md': '# An untyped Document\n',
+          },
+        }),
+        fixtureRoom({
+          name: 'Other',
+          locator: 'other',
+          roomVersion: 'v2',
+          writeGrants: [],
+          providerOwnedPaths: [],
+          documents: {
+            'types/person.md': person,
+            'people/outsider.md': '---\ntype: person\nname: Outsider\n---\n',
+          },
+        }),
+      ],
+    });
     const runtime = createMdRuntime({
-      adapter: createMemoryAdapter({
-        rooms: [
-          {
-            name: 'Studio',
-            locator: 'studio',
-            roomVersion: 'v1',
-            writeGrants: [],
-            providerOwnedPaths: [],
-            documents: {
-              'types/person.md': person,
-              'types/project.md':
-                '---\ntype: definition\nfields:\n  title:\n    kind: string\n    required: true\n  amount:\n    kind: number\n  due:\n    kind: date\n  stage:\n    kind: enum\n    values: [Draft, Ready]\n  owner:\n    kind: reference\n    to: person\n  tags:\n    kind: list\n    of: string\n  amounts:\n    kind: list\n    of: number\n  dates:\n    kind: list\n    of: date\n  stages:\n    kind: list\n    of: enum\n    values: [Draft, Ready]\n  owners:\n    kind: list\n    of: reference\n    to: person\n---\n',
-              'people/ada.md': '---\ntype: person\nname: Ada\n---\n',
-              'people/lin.md': '---\ntype: person\nname: Lin\n---\n',
-              'notes.md': '# An untyped Document\n',
-            },
-          },
-          {
-            name: 'Other',
-            locator: 'other',
-            roomVersion: 'v2',
-            writeGrants: [],
-            providerOwnedPaths: [],
-            documents: {
-              'types/person.md': person,
-              'people/outsider.md': '---\ntype: person\nname: Outsider\n---\n',
-            },
-          },
-        ],
+      ...runtimeOptions({
+        adapter,
+        requiredGuarantees: [],
+        signal: controller.signal,
       }),
-      requiredGuarantees: [],
-      signal: controller.signal,
     });
     window.fieldsFixture = { runtime, stop: () => controller.abort(), changes: [] };
-    await new Promise<void>((resolve) => {
-      runtime.observe('rooms', (rooms) => {
-        if (rooms.length === 2 && rooms.every((room) => room.roomVersion !== null)) resolve();
-      });
-    });
+    await waitForRooms(
+      runtime,
+      (rooms: ReturnType<typeof runtime.rooms>) =>
+        rooms.length === 2 && rooms.every((room) => room.roomVersion !== null),
+    );
   });
 });
 
