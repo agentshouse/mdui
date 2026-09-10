@@ -26,11 +26,12 @@ they pin, nothing more.
       file tree and opens any file in Document View; Search finds files
       through Local Search across all Rooms, narrowed by each of the three
       values.
-- [x] Work lists the App Creator's Drafts across Rooms and each Room's
-      Pending Change queue with outcomes and the Provider's text; Refusal
-      shows the Connection Refusal with its reason and a re-authorization
-      control for a revoked authorization; Storage shows the storage-loss
-      statement; Log exports the synchronization log as text.
+- [ ] Work lists the App Creator's Drafts across Rooms and each Room's
+      Pending Change queue with outcomes and the Provider's text.
+- [x] Refusal shows the Connection Refusal with its reason and a
+      re-authorization control for a revoked authorization; Storage shows
+      the storage-loss statement; Log exports the synchronization log as
+      text.
 - [x] Every screen is operable from the keyboard with visible focus and
       labelled controls, lays out at 360 pixels and on a desktop, uses
       English strings and locale formatting, and follows the light and dark

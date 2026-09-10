@@ -234,10 +234,18 @@ bindApp(runtime);
 | Rooms   | `rooms` / `observe('rooms')`, `observe('query')`, `types`, and Query Paths for each Room's file tree; opening a file binds Document View                     |
 | Search  | Local Query narrowed by Room, MD Type, and one typed field value; substring over Query section text and field values; a result opens File                    |
 | File    | existing Document View                                                                                                                                       |
-| Work    | `draft.read` on Paths Query currently returns, and `observe('queue')` per Room with outcome kind and Provider text. Public Runtime has no Drafts enumeration |
+| Work    | Built: `draft.read` on Paths Query currently returns, and `observe('queue')` per Room with outcome kind and Provider text. Published Runtime `0.1.0-alpha.6` has no public Drafts enumeration |
 | Refusal | `observe('connection-refusal')`; `reauthorize` when `reauthorizationOffered`                                                                                 |
 | Storage | `observe('storage-loss')`                                                                                                                                    |
 | Log     | `log()` shown as text and downloaded as `synchronization-log.txt`                                                                                            |
+
+Work's current Query-path `draft.read` loop is an implementation limit, not a
+narrowed product contract. [PRD-0004](https://github.com/agentshouse/mdruntime/blob/main/docs/prd/prd-0004-document-view-components-and-base-template.md)
+Work remains every durable Draft across Rooms, including unsaved creates at
+absent Paths and Drafts whose Path left Query (`R031`). Root owns the missing
+neutral public Runtime producer and its package. This App does not read
+private Runtime storage and does not consume source-only or assumed future
+exports.
 
 The Sync Status indicator is in the header on every screen. The browser lane
 serves this source without a bundle; the static bundle remains
