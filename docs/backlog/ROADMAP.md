@@ -21,9 +21,19 @@ ticket's Mines.
 3. **Screens.** `components/04` after `runtime/08`. Exit: the main branch
    runs end to end over the in-memory Adapter in the browser lane with the
    launch promises kept.
-4. **Ship.** `shipped-form/01` after MD Runtime `shipped-form/01` and
-   `agents-house-adapter/02`. Exit: main builds to a static bundle with its
-   policy and runs over a real Agents House Building.
+4. **Remote client.** `remote-client/01` after MD Runtime
+   `worker-hosted-runtime/01` and `/08`, then `remote-client/02` after
+   `worker-hosted-runtime/05`, both once House's `app-runtime/02` and
+   `app-runtime/03` in `agentshouse/core` serve the Runtime port and the
+   bridge client. Exit: main runs over the client entry against the host
+   entry in the browser lane with every Runtime call awaited, shows a
+   scripted refusal as its code and fields, and lands a delivered address on
+   the Document it names.
+5. **Ship.** `shipped-form/01` after MD Runtime `shipped-form/01`,
+   `worker-hosted-runtime/04` and `worker-hosted-runtime/07`, and after House
+   builds and serves the App. Exit: main built by House from its committed
+   tree runs at its path on the control origin over the host's Runtime
+   against a real Agents House Building.
 
 ## Exit
 

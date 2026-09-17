@@ -24,8 +24,9 @@ stating the MD Runtime API, the Draft, Save, and outcome rules, the
 neutrality rule, the content-safety rules, the launch promises main keeps,
 what an agent must never do, and that the agent works in a fork with Git:
 obtain the App Repository, change it, build, push. The MIT license file at
-the root. The release seam: main running over a real Agents House Building
-through the Agents House Adapter, observed as an App Creator would.
+the root. The release seam: main built and served by House, running over
+the host's Runtime against a real Agents House Building, observed as an App
+Creator would.
 
 ## Acceptance criteria
 
@@ -37,22 +38,32 @@ through the Agents House Adapter, observed as an App Creator would.
       content and the MIT license file.
 - [ ] The neutrality lane is green on main, and the bundle sends no
       telemetry.
-- [ ] Main, served from a public HTTPS origin the User chooses, runs over the
-      dev Building through the published Adapter package: the User completes
-      the consent once, and Rooms, Search, File with reading and editing,
-      Work, and Log are observed working as an App Creator would, which is
-      the bar of `R036`.
+- [ ] Main, built by House from its committed tree and served at its own
+      path on the control origin, runs over the host's Runtime under the App
+      Creator's own Account on the dev Building, with no App-chosen origin
+      and no Adapter package consumed by main: Rooms, Search, File with
+      reading and editing, Work, and Log are observed working as an App
+      Creator would, which is the bar of `R036`.
 
 ## Mines
 
-Waits for `shipped-form/01` and `agents-house-adapter/02` in
-`agentshouse/mdruntime`, so that the packages the bundle consumes are
-published with Mutation and History. The release seam runs the App where
-House serves it, at its own path on the control origin; there is no client
-identity document and no static host of the App Creator's own. Making the repository public and
-declaring the release are outward-facing acts; the implementer stops for the
-User's confirmation before each. No support matrix, browser matrix, cadence,
-or governance file is added. No example branch gates the release.
+Waits for `shipped-form/01`, `worker-hosted-runtime/04` and
+`worker-hosted-runtime/07` in `agentshouse/mdruntime`, so that the packages
+the bundle consumes are published with Mutation, History and the Provider
+Actions, and on `remote-client/01` and `remote-client/02` here, so that main
+already runs over the remote client with an address. The placement is
+House's: the release seam needs House's App runtime under PRD-0070 in
+`agentshouse/core`, the shell, the SharedWorker that hosts the Runtime and
+the port handoff from `app-runtime/02-run-every-app-over-one-shared-worker`
+and the managed build that resolves the committed lockfile from
+`app-runtime/07-build-from-the-committed-lockfile`, and the status stays
+`blocked` until House builds and serves the App. The release seam runs the
+App where House serves it, at its own path on the control origin; there is
+no client identity document and no static host of the App Creator's own.
+Making the repository public and declaring the release are outward-facing
+acts; the implementer stops for the User's confirmation before each. No
+support matrix, browser matrix, cadence, or governance file is added. No
+example branch gates the release.
 
 ## Out of scope
 

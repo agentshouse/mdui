@@ -16,7 +16,10 @@
     "ready-for-agent",
     "ready-for-human"
   ],
-  "terminalStatuses": ["wontfix", "resolved"],
+  "terminalStatuses": [
+    "wontfix",
+    "resolved"
+  ],
   "historicalUnclassifiedTickets": "docs/backlog/historical-unclassified.txt",
   "ownerships": [
     {
@@ -68,7 +71,7 @@
       "title": "Shipped form",
       "description": "The static bundle build, the agent instruction file, and the release declaration.",
       "includes": [
-        "Bundle build with the Content Security Policy",
+        "The bundle build",
         "Instructions for the App Creator's agent",
         "The release over a real Agents House Building"
       ],
@@ -84,7 +87,9 @@
         "id": "workspace",
         "title": "Workspace",
         "outcome": "The npm project, Compose runner, and recorded stack exist without product behavior.",
-        "tickets": ["foundation/01-choose-the-stack-and-lay-the-workspace"]
+        "tickets": [
+          "foundation/01-choose-the-stack-and-lay-the-workspace"
+        ]
       },
       {
         "id": "components",
@@ -100,13 +105,26 @@
         "id": "screens",
         "title": "Screens",
         "outcome": "The main branch runs end to end over the in-memory Adapter with the launch promises kept.",
-        "tickets": ["components/04-the-screens"]
+        "tickets": [
+          "components/04-the-screens"
+        ]
+      },
+      {
+        "id": "remote-client",
+        "title": "Remote client",
+        "outcome": "Main runs over the remote client of the Provider's Runtime host with every Runtime call awaited, shows a Provider's refusal as its structured code and fields, resolves the shell's address to a Room and a Document and keeps its screen and open file as Presentation State.",
+        "tickets": [
+          "remote-client/01-run-main-over-the-remote-client-and-show-structured-refusals",
+          "remote-client/02-resolve-the-shell-address-and-keep-presentation-state"
+        ]
       },
       {
         "id": "shipped-form",
         "title": "Shipped form",
-        "outcome": "Main builds to a static bundle with its policy, carries the agent instructions, and runs over a real Agents House Building.",
-        "tickets": ["shipped-form/01-bundle-build-agent-instructions-and-release"]
+        "outcome": "Main builds from its committed tree, carries the agent instructions, and runs over a real Agents House Building.",
+        "tickets": [
+          "shipped-form/01-bundle-build-agent-instructions-and-release"
+        ]
       }
     ],
     "ownership": {
@@ -115,14 +133,22 @@
       "components/02-document-view-reading-and-the-sync-status-indicator": "components",
       "components/03-document-view-editing": "components",
       "components/04-the-screens": "screens",
-      "shipped-form/01-bundle-build-agent-instructions-and-release": "shipped-form"
+      "shipped-form/01-bundle-build-agent-instructions-and-release": "shipped-form",
+      "remote-client/01-run-main-over-the-remote-client-and-show-structured-refusals": "screens",
+      "remote-client/02-resolve-the-shell-address-and-keep-presentation-state": "screens"
     },
     "dependencies": {
       "components/01-markdown-renderer-and-field-controls": [
         "foundation/01-choose-the-stack-and-lay-the-workspace"
       ],
-      "components/04-the-screens": ["components/03-document-view-editing"],
+      "components/04-the-screens": [
+        "components/03-document-view-editing"
+      ],
       "shipped-form/01-bundle-build-agent-instructions-and-release": [
+        "components/04-the-screens",
+        "remote-client/02-resolve-the-shell-address-and-keep-presentation-state"
+      ],
+      "remote-client/01-run-main-over-the-remote-client-and-show-structured-refusals": [
         "components/04-the-screens"
       ]
     }
@@ -133,21 +159,28 @@
       "kind": "ownership",
       "title": "Platform",
       "short": "Workspace",
-      "ownershipIds": ["workspace"]
+      "ownershipIds": [
+        "workspace"
+      ]
     },
     {
       "id": "presentation",
       "kind": "ownership",
       "title": "Presentation",
       "short": "Components and screens",
-      "ownershipIds": ["components", "screens"]
+      "ownershipIds": [
+        "components",
+        "screens"
+      ]
     },
     {
       "id": "release",
       "kind": "ownership",
       "title": "Release",
       "short": "The bundle and the release",
-      "ownershipIds": ["shipped-form"]
+      "ownershipIds": [
+        "shipped-form"
+      ]
     },
     {
       "id": "historical-record",

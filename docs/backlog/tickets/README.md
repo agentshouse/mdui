@@ -10,5 +10,8 @@ repository are recorded in each ticket's Mines.
 - [`foundation/`](foundation/) stands the workspace.
 - [`components/`](components/) builds the custom elements, Document View, and
   the screens of main.
+- [`remote-client/`](remote-client/) moves main onto the remote client of
+  the Provider's Runtime host and onto structured refusals, and gives it the
+  shell's address and Presentation State.
 - [`shipped-form/`](shipped-form/) builds the bundle, writes the agent
   instructions, and declares the release.
