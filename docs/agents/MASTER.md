@@ -43,14 +43,15 @@ does not run tests. The implementer already ran the tests
 A PR gets two merge attempts per sitting and is parked after the second
 refusal. Refill the slot immediately after a merge or a park.
 
-A merge that lands a ticket another repository waits on is reported, not
-acted on: publishing a package and lifting a `blocked` hold are the User's
-acts.
+A merge that owes a package release is followed at once by a release agent,
+as `AGENTS.md` sets out; the release needs no User confirmation. A merge that
+lands a ticket another repository waits on is reported to that repository's
+Master, which lifts its `blocked` hold once the version is on the registry.
 
 The Master never implements, never runs tests, never edits an implementer's
 branch, never adds findings or asks for fixes beyond the class rules of
-`/h-code-review`, never files Issues, never publishes a package, and never
-chooses a model.
+`/h-code-review`, never files Issues, never publishes a package itself (a release agent
+does), and never chooses a model.
 
 ## Report
 

@@ -60,8 +60,9 @@ and the managed build that resolves the committed lockfile from
 `blocked` until House builds and serves the App. The release seam runs the
 App where House serves it, at its own path on the control origin; there is
 no client identity document and no static host of the App Creator's own.
-Making the repository public and declaring the release are outward-facing
-acts; the implementer stops for the User's confirmation before each. No
+Making the repository public is an outward-facing act; the implementer stops
+for the User's confirmation before it. Declaring the release is agent work
+like a merge (`AGENTS.md`) and needs no confirmation. No
 support matrix, browser matrix, cadence, or governance file is added. No
 example branch gates the release.
 
