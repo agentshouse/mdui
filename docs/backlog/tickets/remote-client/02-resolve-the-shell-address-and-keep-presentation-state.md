@@ -1,6 +1,6 @@
 # 02-resolve-the-shell-address-and-keep-presentation-state - Resolve the shell's address to a Room and a Document and keep main's screen and open file as Presentation State
 
-Status: blocked
+Status: ready-for-agent
 
 ## Frame
 
