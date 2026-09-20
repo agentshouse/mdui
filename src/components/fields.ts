@@ -379,15 +379,6 @@ export class ReferenceField extends EnumField {
   protected override readonly kind = 'reference';
   private unobserve: (() => void) | undefined;
   private paths: readonly string[] = [];
-  override async bind(
-    runtime: MdRuntimeClient,
-    room: string,
-    type: string,
-    field: string,
-  ): Promise<void> {
-    await super.bind(runtime, room, type, field);
-    this.watch();
-  }
   override bindDefinition(
     runtime: MdRuntimeClient,
     room: string,

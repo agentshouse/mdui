@@ -656,8 +656,6 @@ export class DocumentView extends HTMLElement {
   }
 
   private renderDocument(body: HTMLElement, file: QueryDocument): void {
-    const runtime = this.runtime!;
-    const room = file.room;
     const definition = mdTypes(this.roomState?.model).find((entry) => entry.name === file.type);
     if (this.editor?.part === 'whole') {
       body.append(this.textPart(this.editor.name, this.editor.live, true, 'whole'));

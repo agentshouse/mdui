@@ -1,6 +1,6 @@
 import type { SyncStatus } from '@agentshouse/mdruntime';
 import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
-import { observation, refusalParts } from './runtime.js';
+import { observation, queueKinds, refusalParts } from './runtime.js';
 import { statusStyles } from './theme.js';
 
 const states = {
@@ -48,12 +48,16 @@ export class SyncStatusIndicator extends HTMLElement {
     state.textContent = states[status.state];
     region.append(state);
     for (const entry of status.attentionRequired) {
+      const attention = document.createElement('p');
+      attention.className = 'attention';
+      attention.textContent = queueKinds[entry.outcome];
+      region.append(attention);
       if (entry.refusal === null) continue;
       for (const part of refusalParts(entry.refusal)) {
-        const attention = document.createElement('p');
-        attention.className = 'attention';
-        attention.textContent = part;
-        region.append(attention);
+        const text = document.createElement('p');
+        text.className = 'attention';
+        text.textContent = part;
+        region.append(text);
       }
     }
     if (status.reset !== null) {

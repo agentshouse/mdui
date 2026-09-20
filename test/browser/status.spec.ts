@@ -112,6 +112,7 @@ test('shows attention from Observe when a head Change Batch is Conflicted', asyn
     ]);
     if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
   });
+  await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Conflicted');
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('title_conflict');
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText(
     'title was changed on the Provider',
@@ -125,6 +126,30 @@ test('shows attention from Observe when a head Change Batch is Conflicted', asyn
       locator: 'studio',
       outcome: 'conflicted',
       refusal: { code: 'title_conflict', fields: { detail: 'title was changed on the Provider' } },
+    },
+  ]);
+});
+
+test('shows Expired on an attention-required entry with no ProviderRefusal', async ({ page }) => {
+  await start(page);
+  await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Synced');
+  await page.evaluate(async () => {
+    window.statusFixture.adapter.script('mutate', { kind: 'expired' });
+    const result = await window.statusFixture.runtime.save('studio', [
+      { kind: 'field', path: 'notes/one.md', name: 'title', value: 'Next' },
+    ]);
+    if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
+  });
+  await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Expired');
+  expect(
+    await page.evaluate(
+      async () => (await window.statusFixture.runtime.syncStatus()).attentionRequired,
+    ),
+  ).toMatchObject([
+    {
+      locator: 'studio',
+      outcome: 'expired',
+      refusal: null,
     },
   ]);
 });

@@ -20,6 +20,14 @@ export function observation(start: Promise<() => void>): () => void {
   };
 }
 
+export const queueKinds = {
+  pending: 'Pending',
+  conflicted: 'Conflicted',
+  rejected: 'Rejected',
+  expired: 'Expired',
+  'retryable-refusal': 'Pending',
+} as const;
+
 export function refusalParts(refusal: {
   code: string;
   fields: Readonly<Record<string, unknown>>;

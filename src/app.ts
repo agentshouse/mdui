@@ -8,7 +8,7 @@ import type {
 } from '@agentshouse/mdruntime';
 import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import { appStyles } from './components/theme.js';
-import { mdTypes, observation, refusalParts } from './components/runtime.js';
+import { mdTypes, observation, queueKinds, refusalParts } from './components/runtime.js';
 import './components/status.js';
 import './components/view.js';
 
@@ -31,14 +31,6 @@ const reasons: Record<
   'md-model-version-mismatch': 'The declared MD Model version cannot be loaded',
   'revoked-authorization': 'Authorization was revoked',
 };
-
-const queueKinds = {
-  pending: 'Pending',
-  conflicted: 'Conflicted',
-  rejected: 'Rejected',
-  expired: 'Expired',
-  'retryable-refusal': 'Pending',
-} as const;
 
 let unbind = () => {};
 
