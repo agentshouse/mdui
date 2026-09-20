@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 const commands = {
   typecheck: [['tsc', '--noEmit']],
   format: [['npm', 'run', 'ops', '--', 'format', '--check']],
+  house: [['node', 'scripts/house-baseline.mjs', 'check']],
   pure: [['vitest', 'run', '--project', 'pure']],
   browser: [['playwright', 'test']],
   static: [

@@ -3,6 +3,9 @@ name: to-tickets
 description: Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each declaring its blocking edges, published to the configured tracker (edges as text in one file per ticket locally, or native blocking links on a real tracker).
 ---
 
+<!-- house: vendored from agentshouse/house — skills/to-tickets/SKILL.md (channel base).
+Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`. -->
+
 # To Tickets
 
 Break a plan, spec, or conversation into a set of **tickets**: tracer-bullet vertical slices, each declaring the tickets that **block** it.

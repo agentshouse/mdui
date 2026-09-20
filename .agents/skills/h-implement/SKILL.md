@@ -3,6 +3,9 @@ name: h-implement
 description: Deliver assigned repository tickets as one Assignment: claim, one worktree, TDD, bounded review, residuals, and one PR ready for ops merge.
 ---
 
+<!-- house: vendored from agentshouse/house — md/skills/h-implement/SKILL.md (channel md).
+Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`. -->
+
 # Implement
 
 ## Admit the assignment

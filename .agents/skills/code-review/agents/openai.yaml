@@ -1,3 +1,6 @@
+# house: vendored from agentshouse/house — skills/code-review/agents/openai.yaml (channel base).
+# Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`.
+
 interface:
   display_name: "Code Review"
   short_description: "Review a diff on standards and spec"

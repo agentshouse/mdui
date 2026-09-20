@@ -3,6 +3,9 @@ name: h-to-tickets
 description: Break an accepted PRD, plan, or settled conversation into this repository's tracer-bullet tickets and Delivery Tracks, audited by a fresh agent before the User commits them.
 ---
 
+<!-- house: vendored from agentshouse/house — md/skills/h-to-tickets/SKILL.md (channel md).
+Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`. -->
+
 # To Tickets
 
 ## Gather context

@@ -3,6 +3,9 @@ name: to-spec
 description: "Turn the current conversation into a spec and publish it to the project issue tracker: no interview, just synthesis of what you've already discussed."
 ---
 
+<!-- house: vendored from agentshouse/house — skills/to-spec/SKILL.md (channel base).
+Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`. -->
+
 This skill synthesizes the current conversation context and codebase understanding into a spec.
 
 Use the current repository's documented issue tracker and triage vocabulary. If
