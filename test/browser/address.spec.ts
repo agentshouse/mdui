@@ -11,7 +11,6 @@ declare global {
     houseBridgeComplete?: (port: unknown) => void;
     addressOther?: Window | null;
     addressRuntimePort?: Promise<MessagePort>;
-    presentationReadHeld?: boolean;
     releasePresentationRead?: () => void;
     addressFixture: {
       runtime: MdRuntimeClient;
@@ -210,8 +209,10 @@ test('Presentation State is observed, restored without an address, and yields to
 }) => {
   await start(page);
   await page.evaluate(async () => {
+    const runtimeHost = window.addressFixture.runtimeHost;
+    if (runtimeHost === undefined) throw new Error('The Runtime host is missing.');
     const channel = new MessageChannel();
-    window.addressFixture.runtimeHost.attach(channel.port1, 'mdui');
+    runtimeHost.attach(channel.port1, 'mdui');
     const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
     const other = connectMdRuntime(channel.port2);
     const seen: unknown[] = [];
@@ -341,14 +342,14 @@ test('a restore does not clobber an address delivered while presentation is stil
     const channel = new MessageChannel();
     const detach = runtimeHost.attach(channel.port1, 'mdui');
     const connected = connectMdRuntime(channel.port2);
-    window.presentationReadHeld = false;
+    let readStarted = false;
     const runtime = new Proxy(connected, {
       get(target, prop, receiver) {
         if (prop === 'presentation') {
           return {
             async read() {
               const value = await target.presentation.read();
-              window.presentationReadHeld = true;
+              readStarted = true;
               await new Promise<void>((resolve) => {
                 window.releasePresentationRead = resolve;
               });
@@ -366,7 +367,7 @@ test('a restore does not clobber an address delivered while presentation is stil
     const { host, bridge } = openTestBridge('/');
     const bound = bindApp(runtime, bridge);
     const started = Date.now();
-    while (window.presentationReadHeld !== true) {
+    while (!readStarted) {
       if (Date.now() - started > 5000) throw new Error('presentation.read did not start');
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
@@ -375,11 +376,9 @@ test('a restore does not clobber an address delivered while presentation is stil
     window.releasePresentationRead?.();
     const next = await bound;
     if (
-      host.navigations
-        .slice(prior)
-        .some(
-          (entry) => entry.mode === 'replace' && entry.address === '/file/studio/notes/hello.md',
-        )
+      host.navigations.slice(prior).some((entry: { mode: string; address: string }) => {
+        return entry.mode === 'replace' && entry.address === '/file/studio/notes/hello.md';
+      })
     ) {
       throw new Error('restore replaced the delivered address');
     }
@@ -501,8 +500,10 @@ test('a second tab without an address below the App path follows Presentation St
     });
   });
   await page.evaluate(() => {
+    const runtimeHost = window.addressFixture.runtimeHost;
+    if (runtimeHost === undefined) throw new Error('The Runtime host is missing.');
     const channel = new MessageChannel();
-    window.addressFixture.runtimeHost.attach(channel.port1, 'mdui');
+    runtimeHost.attach(channel.port1, 'mdui');
     window.addressOther?.postMessage({ runtime: true }, '*', [channel.port2]);
   });
   await other.evaluate(async () => {
