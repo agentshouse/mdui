@@ -231,7 +231,8 @@ from the public remote client only. The part of the shell address below the App'
 path names a screen and, for File, a Room locator and Document path; main
 resolves it against the Runtime and asks the bridge client to push or replace
 it. Presentation State is which screen is shown and which file Document View is
-bound to, written through the client's presentation surface.
+bound to, written through the client's presentation surface and observed so a
+tab with no address below the App path follows it.
 
 ```js
 import { connectApp } from './index.js';

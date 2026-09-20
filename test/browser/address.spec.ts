@@ -9,13 +9,17 @@ import type { MemoryAdapter } from '@agentshouse/mdruntime/memory';
 declare global {
   interface Window {
     houseBridgeComplete?: (port: unknown) => void;
+    addressOther?: Window | null;
+    addressRuntimePort?: Promise<MessagePort>;
+    presentationReadHeld?: boolean;
+    releasePresentationRead?: () => void;
     addressFixture: {
       runtime: MdRuntimeClient;
-      runtimeHost: MdRuntimeHost;
-      adapter: MemoryAdapter;
+      runtimeHost?: MdRuntimeHost;
+      adapter?: MemoryAdapter;
       host: HouseBridgeTestHost;
       bridge: HouseBridge;
-      shell: RuntimeShell;
+      shell?: RuntimeShell;
       stop: () => void;
       unbind: () => void;
       seen: unknown[];
@@ -36,6 +40,8 @@ const studio = {
     'types/note.md': noteType,
     'notes/hello.md': '---\ntype: note\ntitle: Hello\n---\n## Body\nalpha unique phrase\n',
     'notes/other.md': '---\ntype: note\ntitle: Other\n---\n## Body\nbeta unique phrase\n',
+    'notes/hello world.md': '---\ntype: note\ntitle: Spaced\n---\n## Body\nspaced unique phrase\n',
+    'notes/hash#name.md': '---\ntype: note\ntitle: Hashed\n---\n## Body\nhash unique phrase\n',
   },
 };
 
@@ -46,11 +52,9 @@ async function start(
   await page.goto('/');
   await page.evaluate(
     async ({ address, rooms, app }) => {
-      const { createHouseBridgeTestHost } = await import('@agentshouse/app-bridge/test-host');
-      const { connectHouseBridge } = await import('@agentshouse/app-bridge');
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const helper = '/src/testing.js';
-      const { fixtureRoom, openTestRuntime, waitForRooms } = await import(helper);
+      const { fixtureRoom, openTestBridge, openTestRuntime, waitForRooms } = await import(helper);
       const specifier = '/src/app.js';
       const { bindApp } = (await import(specifier)) as {
         bindApp: (runtime: MdRuntimeClient, bridge: HouseBridge) => Promise<() => void>;
@@ -61,8 +65,7 @@ async function start(
         discoveryIntervalMs: 60_000,
         app,
       });
-      const host = createHouseBridgeTestHost({ address });
-      const bridge = connectHouseBridge(host.port);
+      const { host, bridge } = openTestBridge(address);
       const unbind = await bindApp(opened.runtime, bridge);
       window.addressFixture = {
         runtime: opened.runtime,
@@ -165,12 +168,11 @@ test('opening a file and moving between screens push, and a delivered address la
 async function remount(page: Page, address: string) {
   await page.evaluate(async (address) => {
     const { adapter, runtimeHost, shell, stop, unbind } = window.addressFixture;
+    if (runtimeHost === undefined) throw new Error('The Runtime host is missing.');
     unbind();
-    const { createHouseBridgeTestHost } = await import('@agentshouse/app-bridge/test-host');
-    const { connectHouseBridge } = await import('@agentshouse/app-bridge');
     const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
     const helper = '/src/testing.js';
-    const { waitForRooms } = await import(helper);
+    const { openTestBridge, waitForRooms } = await import(helper);
     const specifier = '/src/app.js';
     const { bindApp } = (await import(specifier)) as {
       bindApp: (runtime: MdRuntimeClient, bridge: HouseBridge) => Promise<() => void>;
@@ -178,8 +180,7 @@ async function remount(page: Page, address: string) {
     const channel = new MessageChannel();
     const detach = runtimeHost.attach(channel.port1, 'mdui');
     const runtime = connectMdRuntime(channel.port2);
-    const host = createHouseBridgeTestHost({ address });
-    const bridge = connectHouseBridge(host.port);
+    const { host, bridge } = openTestBridge(address);
     const next = await bindApp(runtime, bridge);
     window.addressFixture = {
       runtime,
@@ -279,6 +280,288 @@ test('main composes addresses only under the App path and never pushes Refusal o
     { mode: 'push', address: '/apps/mdui/file/studio/notes/hello.md' },
     { mode: 'push', address: '/apps/mdui/search' },
   ]);
+});
+
+test('a later delivered address wins over an earlier File resolution still in flight', async ({
+  page,
+}) => {
+  await start(page, { address: '/search' });
+  await page.evaluate(() => {
+    window.addressFixture.host.open('/file/studio/notes/hello.md');
+    window.addressFixture.host.open('/search');
+  });
+  await expect(page.getByRole('heading', { level: 1, name: 'Search' })).toBeVisible();
+  await expect
+    .poll(async () => ({
+      file: await page.getByRole('heading', { level: 1, name: 'File' }).isVisible(),
+      search: await page.getByRole('heading', { level: 1, name: 'Search' }).isVisible(),
+      address: await page.evaluate(() => window.addressFixture.host.address()),
+    }))
+    .toEqual({ file: false, search: true, address: '/search' });
+});
+
+test('a restore without an address yields to one the shell delivers afterwards', async ({
+  page,
+}) => {
+  await start(page);
+  await page
+    .getByRole('article', { name: 'Studio' })
+    .getByRole('button', { name: 'notes/hello.md' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
+  await remount(page, '/');
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await page.evaluate(() => window.addressFixture.host.open('/file/studio/notes/other.md'));
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Other');
+  expect(await page.evaluate(() => window.addressFixture.host.address())).toBe(
+    '/file/studio/notes/other.md',
+  );
+});
+
+test('a restore does not clobber an address delivered while presentation is still being read', async ({
+  page,
+}) => {
+  await start(page);
+  await page
+    .getByRole('article', { name: 'Studio' })
+    .getByRole('button', { name: 'notes/hello.md' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
+  await page.evaluate(async () => {
+    const { adapter, runtimeHost, shell, stop, unbind } = window.addressFixture;
+    if (runtimeHost === undefined) throw new Error('The Runtime host is missing.');
+    unbind();
+    const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
+    const helper = '/src/testing.js';
+    const { openTestBridge, waitForRooms } = await import(helper);
+    const specifier = '/src/app.js';
+    const { bindApp } = (await import(specifier)) as {
+      bindApp: (runtime: MdRuntimeClient, bridge: HouseBridge) => Promise<() => void>;
+    };
+    const channel = new MessageChannel();
+    const detach = runtimeHost.attach(channel.port1, 'mdui');
+    const connected = connectMdRuntime(channel.port2);
+    window.presentationReadHeld = false;
+    const runtime = new Proxy(connected, {
+      get(target, prop, receiver) {
+        if (prop === 'presentation') {
+          return {
+            async read() {
+              const value = await target.presentation.read();
+              window.presentationReadHeld = true;
+              await new Promise<void>((resolve) => {
+                window.releasePresentationRead = resolve;
+              });
+              return value;
+            },
+            write(value: unknown) {
+              return target.presentation.write(value);
+            },
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const { host, bridge } = openTestBridge('/');
+    const bound = bindApp(runtime, bridge);
+    const started = Date.now();
+    while (window.presentationReadHeld !== true) {
+      if (Date.now() - started > 5000) throw new Error('presentation.read did not start');
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    const prior = host.navigations.length;
+    host.open('/file/studio/notes/other.md');
+    window.releasePresentationRead?.();
+    const next = await bound;
+    if (
+      host.navigations
+        .slice(prior)
+        .some(
+          (entry) => entry.mode === 'replace' && entry.address === '/file/studio/notes/hello.md',
+        )
+    ) {
+      throw new Error('restore replaced the delivered address');
+    }
+    window.addressFixture = {
+      runtime,
+      runtimeHost,
+      adapter,
+      host,
+      bridge,
+      shell,
+      stop: () => {
+        next();
+        detach();
+        stop();
+      },
+      unbind: next,
+      seen: [],
+    };
+    await waitForRooms(
+      connected,
+      (visible: readonly { roomVersion: string | null }[]) =>
+        visible.length === 1 && visible.every((room) => room.roomVersion !== null),
+    );
+  });
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Other');
+  expect(await page.evaluate(() => window.addressFixture.host.address())).toBe(
+    '/file/studio/notes/other.md',
+  );
+});
+
+test('a File address under an App path that names a screen still opens File', async ({ page }) => {
+  await start(page, { address: '/apps/work/file/studio/notes/hello.md' });
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Search' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Search' })).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      window.addressFixture.host.navigations.map((entry) => ({
+        mode: entry.mode,
+        address: entry.address,
+      })),
+    ),
+  ).toEqual([{ mode: 'push', address: '/apps/work/search' }]);
+});
+
+test('Document paths with a space or a hash round-trip through the address', async ({ page }) => {
+  await start(page);
+  await page
+    .getByRole('article', { name: 'Studio' })
+    .getByRole('button', { name: 'notes/hello world.md' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Spaced');
+  expect(await page.evaluate(() => window.addressFixture.host.address())).toBe(
+    '/file/studio/notes/hello%20world.md',
+  );
+  await page.evaluate(() => window.addressFixture.host.open('/file/studio/notes/hash%23name.md'));
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hashed');
+  await expect(page.locator('md-document-view')).toContainText('hash unique phrase');
+});
+
+test('re-applying the current address does not hide Storage or a live Refusal', async ({
+  page,
+}) => {
+  await start(page, { address: '/file/studio/notes/hello.md' });
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Storage' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Storage' })).toBeVisible();
+  await page.evaluate(async () => {
+    const result = await window.addressFixture.runtime.save('studio', [
+      { kind: 'remove', path: 'notes/other.md' },
+    ]);
+    if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
+  });
+  await expect(page.getByRole('heading', { level: 1, name: 'Storage' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeHidden();
+  await page.evaluate(async () => {
+    const adapter = window.addressFixture.adapter;
+    if (adapter === undefined) throw new Error('The Adapter is missing.');
+    adapter.script('discover', { kind: 'revoked-authorization' });
+    const result = await window.addressFixture.runtime.save('studio', [
+      { kind: 'field', path: 'notes/hello.md', name: 'title', value: 'Trigger discovery' },
+    ]);
+    if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
+  });
+  await expect(page.getByRole('heading', { level: 1, name: 'Refusal' })).toBeVisible();
+  await page.evaluate(() => window.addressFixture.host.open('/file/studio/notes/hello.md'));
+  await expect(page.getByRole('heading', { level: 1, name: 'Refusal' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeHidden();
+});
+
+test('a second tab without an address below the App path follows Presentation State', async ({
+  page,
+}) => {
+  await start(page);
+  const popup = page.context().waitForEvent('page');
+  await page.evaluate(() => {
+    window.addressOther = window.open('/', '_blank');
+  });
+  const other = await popup;
+  await other.waitForLoadState('domcontentloaded');
+  await other.evaluate(() => {
+    window.addressRuntimePort = new Promise<MessagePort>((resolve) => {
+      window.addEventListener(
+        'message',
+        (event) => {
+          const port = event.ports[0];
+          if (port !== undefined) resolve(port);
+        },
+        { once: true },
+      );
+    });
+  });
+  await page.evaluate(() => {
+    const channel = new MessageChannel();
+    window.addressFixture.runtimeHost.attach(channel.port1, 'mdui');
+    window.addressOther?.postMessage({ runtime: true }, '*', [channel.port2]);
+  });
+  await other.evaluate(async () => {
+    const port = await window.addressRuntimePort!;
+    const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
+    const helper = '/src/testing.js';
+    const { openTestBridge, waitForRooms } = await import(helper);
+    const specifier = '/src/app.js';
+    const { bindApp } = (await import(specifier)) as {
+      bindApp: (runtime: MdRuntimeClient, bridge: HouseBridge) => Promise<() => void>;
+    };
+    const runtime = connectMdRuntime(port);
+    const { host, bridge } = openTestBridge('/');
+    const unbind = await bindApp(runtime, bridge);
+    window.addressFixture = {
+      runtime,
+      host,
+      bridge,
+      stop: unbind,
+      unbind,
+      seen: [],
+    };
+    await waitForRooms(
+      runtime,
+      (visible: readonly { roomVersion: string | null }[]) =>
+        visible.length === 1 && visible.every((room) => room.roomVersion !== null),
+    );
+  });
+  await expect(other.getByRole('heading', { level: 1, name: 'Rooms' })).toBeVisible();
+  await page
+    .getByRole('article', { name: 'Studio' })
+    .getByRole('button', { name: 'notes/hello.md' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
+  await expect(other.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
+  await expect(other.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await other.evaluate(() => window.addressFixture.stop());
+});
+
+test('the open file stays in Presentation State when the screen is not File', async ({ page }) => {
+  await start(page);
+  await page
+    .getByRole('article', { name: 'Studio' })
+    .getByRole('button', { name: 'notes/hello.md' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Search' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Search' })).toBeVisible();
+  await remount(page, '/');
+  await expect(page.getByRole('heading', { level: 1, name: 'Search' })).toBeVisible();
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'File' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
 });
 
 test('connectApp opens a delivered File address over the bridge client', async ({ page }) => {

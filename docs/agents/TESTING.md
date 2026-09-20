@@ -138,7 +138,12 @@ host entry serving the in-memory Adapter, with `@agentshouse/app-bridge/test-hos
 playing the shell: a delivered address opens File or names an unresolved
 address on Rooms, user moves push and Back/Forward land, Presentation State is
 observed on a second port of the same App, a reload without an address below
-the App's path restores it, and a delivered address wins.
+the App's path restores it, and a delivered address wins over Presentation
+State even when restore is still reading. A later delivery wins over an earlier
+File resolution still in flight. Paths encode for a space or `#`. A second tab
+with no address below the App path follows Presentation State. Re-applying the
+current address does not hide Storage or a live Connection Refusal. The open
+file remains in Presentation State when the screen is not File.
 The Work specification exercises absent-Path creations, unchanged-Path content
 changes, remote removal and Room access loss, navigation and literal reload,
 same-tab and cross-tab Draft and queue convergence, Save consumption, and
