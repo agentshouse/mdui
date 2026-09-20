@@ -86,12 +86,9 @@ use the same interface.
    `npm run ops -- merge <number>` squash-merges; the implementer never runs it.
 3. For every test decision, follow `docs/agents/TESTING.md`. The implementer
    runs those tests. Merge does not.
-4. A package release is agent work, exactly like a merge. After the merge
-   that owes a release, the Master starts a release agent that runs the
-   repository's `docs/releases/` handoff end to end: the gate, the publish
-   workflow dispatch and the registry readback. Nobody stops for the User's
-   confirmation; only the User consumes these packages today. Changing a
-   repository's visibility is not a release.
+
+This repository publishes no package. There is no release step after a merge,
+and no merge here ever owes one.
 
 ## Commands and infrastructure
 
