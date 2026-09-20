@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 declare global {
   interface Window {
     houseBridge?: Promise<unknown>;
+    houseBridgeComplete?: (port: unknown) => void;
   }
 }
 
@@ -25,14 +26,9 @@ test('loads the App source and reads Types and Query through the remote client',
     const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
     const helper = '/src/testing.js';
     const { fixtureRoom, fixtureShell, runtimeOptions, waitForRooms } = await import(helper);
-    const entry = '/src/index.js';
-    const { connectApp } = (await import(entry)) as {
-      connectApp: () => Promise<() => void>;
-    };
     const controller = new AbortController();
     try {
       const house = createHouseBridgeTestHost();
-      window.houseBridge = house.port;
       const adapter = createMemoryAdapter({
         rooms: [
           fixtureRoom({
@@ -63,7 +59,7 @@ test('loads the App source and reads Types and Query through the remote client',
       host.attach(appChannel.port1, 'mdui');
       host.attach(probeChannel.port1, 'mdui');
       house.attachRuntime(appChannel.port2);
-      await connectApp();
+      window.houseBridgeComplete?.(await house.port);
       const runtime = connectMdRuntime(probeChannel.port2);
       await waitForRooms(runtime, (rooms: readonly { roomVersion: string | null }[]) =>
         rooms.some((room) => room.roomVersion === 'v1'),
@@ -72,11 +68,13 @@ test('loads the App source and reads Types and Query through the remote client',
       return {
         types: types.collection.status === 'unavailable' ? [] : types.collection.types,
         query: await runtime.query({ selector: { room: 'fixture', type: 'note' } }),
+        bound: document.getElementById('app') !== null,
       };
     } finally {
       controller.abort();
     }
   });
+  expect(visible.bound).toBe(true);
   expect(visible.types).toEqual([
     {
       name: 'note',

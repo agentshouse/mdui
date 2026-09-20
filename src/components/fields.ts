@@ -42,14 +42,14 @@ export abstract class FieldControl extends HTMLElement {
     const definition = mdTypes((await runtime.types(room)).collection).find(
       (entry) => entry.name === type,
     )?.fields[field] as FieldDefinition | undefined;
-    this[configure](runtime, room, field, definition);
+    this.bindDefinition(runtime, room, field, definition);
   }
 
   bindDefinition(
     runtime: MdRuntimeClient,
     room: string,
     field: string,
-    definition: FieldDefinition,
+    definition: FieldDefinition | undefined,
   ): void {
     this[configure](runtime, room, field, definition);
   }
@@ -392,7 +392,7 @@ export class ReferenceField extends EnumField {
     runtime: MdRuntimeClient,
     room: string,
     field: string,
-    definition: FieldDefinition,
+    definition: FieldDefinition | undefined,
   ): void {
     super.bindDefinition(runtime, room, field, definition);
     this.watch();

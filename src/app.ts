@@ -32,6 +32,14 @@ const reasons: Record<
   'revoked-authorization': 'Authorization was revoked',
 };
 
+const queueKinds = {
+  pending: 'Pending',
+  conflicted: 'Conflicted',
+  rejected: 'Rejected',
+  expired: 'Expired',
+  'retryable-refusal': 'Pending',
+} as const;
+
 let unbind = () => {};
 
 function addPath(nodes: TreeNode[], parts: readonly string[], full: string): void {
@@ -190,6 +198,19 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
   let renderedRooms: string | undefined;
   let visibleRooms: readonly AppRoom[] = [];
   let closed = false;
+  let searchRead = 0;
+
+  function cleanup(): void {
+    closed = true;
+    draftRead += 1;
+    searchRead += 1;
+    for (const stop of queueStops) stop();
+    queueStops = [];
+    for (const stop of stops) stop();
+    stops.length = 0;
+    app.remove();
+  }
+  unbind = cleanup;
 
   function show(screen: Screen): void {
     current = screen;
@@ -314,16 +335,9 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
       const list = document.createElement('ul');
       for (const entry of queues.get(room.locator) ?? []) {
         const item = document.createElement('li');
-        if (entry.outcome.kind === 'pending' || entry.outcome.kind === 'retryable-refusal') {
-          const pending = document.createElement('p');
-          pending.textContent = 'Pending';
-          item.append(pending);
-        }
-        if (entry.outcome.kind === 'expired') {
-          const expired = document.createElement('p');
-          expired.textContent = 'Expired';
-          item.append(expired);
-        }
+        const kind = document.createElement('p');
+        kind.textContent = queueKinds[entry.outcome.kind];
+        item.append(kind);
         if (entry.outcome.kind === 'retryable-refusal' && entry.outcome.reset !== undefined) {
           const reset = document.createElement('p');
           reset.textContent = entry.outcome.reset;
@@ -392,13 +406,15 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
   });
   form.addEventListener('submit', (event) => {
     event.preventDefault();
+    const requested = ++searchRead;
+    resultsPart.replaceChildren();
     void (async () => {
-      resultsPart.replaceChildren();
       const types: MdType[] = [];
       for (const room of visibleRooms) types.push(...mdTypes(room.model));
       const text = String(new FormData(form).get('text') ?? '');
       const result = await runtime.query({ selector: searchSelector(form, types) });
-      if (closed) return;
+      if (closed || requested !== searchRead) return;
+      resultsPart.replaceChildren();
       for (const file of result.documents) {
         if (!matchesSearch(file, text)) continue;
         const item = document.createElement('li');
@@ -469,14 +485,5 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
     ),
   ]);
 
-  unbind = () => {
-    closed = true;
-    draftRead += 1;
-    for (const stop of queueStops) stop();
-    queueStops = [];
-    for (const stop of stops) stop();
-    stops.length = 0;
-    app.remove();
-  };
-  return unbind;
+  return cleanup;
 }

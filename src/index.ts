@@ -12,4 +12,4 @@ export async function connectApp() {
   return bindApp(connectMdRuntime(await bridge.runtime));
 }
 
-if (Object.hasOwn(globalThis, 'houseBridge')) void connectApp();
+void connectApp();

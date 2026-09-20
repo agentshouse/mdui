@@ -26,8 +26,9 @@ export function refusalParts(refusal: {
 }): string[] {
   return [
     refusal.code,
-    ...Object.values(refusal.fields).map((value) =>
+    ...Object.entries(refusal.fields).flatMap(([name, value]) => [
+      name,
       typeof value === 'string' ? value : JSON.stringify(value),
-    ),
+    ]),
   ];
 }
