@@ -137,25 +137,33 @@ export function runtimeOptions(
   return { ...options, modelBinding: fixtureBinding, queryBinding: fixtureQuery };
 }
 
+export type TestBridgeHost = Pick<HouseBridgeTestHost, 'port' | 'navigations' | 'address' | 'open'>;
+
 export function openTestBridge(
   address = '/',
   options: { verbatim?: boolean } = {},
 ): {
-  host: HouseBridgeTestHost;
+  host: TestBridgeHost;
   bridge: HouseBridge;
 } {
   if (options.verbatim !== true) {
     const host = createHouseBridgeTestHost({ address });
     return { host, bridge: connectHouseBridge(host.port) };
   }
+  return createCore2076DeliveryHost(address);
+}
+
+function createCore2076DeliveryHost(address: string): {
+  host: TestBridgeHost;
+  bridge: HouseBridge;
+} {
   const navigations: HouseBridgeNavigation[] = [];
-  const ceremonies: string[] = [];
   const listeners = new Set<(event: HouseBridgeEvent) => void>();
   const queued: HouseBridgeEvent[] = [];
   let started = false;
   let current = address;
-  function deliver(data: unknown, ports: readonly HouseMessagePort[] = []): void {
-    const event = { data, ports };
+  function deliver(data: unknown): void {
+    const event = { data, ports: [] as const };
     if (!started) {
       queued.push(event);
       return;
@@ -171,18 +179,13 @@ export function openTestBridge(
   const port: HouseMessagePort = {
     postMessage(message) {
       const data = message as { house?: unknown; mode?: unknown; address?: unknown } | null;
-      if (data === null || typeof data !== 'object') return;
-      if (data.house !== 'navigate') return;
-      const asked = typeof data.address === 'string' ? data.address : null;
-      if (asked === null) {
-        deliver({ house: 'navigate-refused', address: null });
-        return;
-      }
+      if (data === null || typeof data !== 'object' || data.house !== 'navigate') return;
+      if (typeof data.address !== 'string') return;
       navigations.push({
         mode: data.mode === 'replace' ? 'replace' : 'push',
-        address: asked,
+        address: data.address,
       });
-      arrive(asked, true);
+      arrive(data.address, true);
     },
     addEventListener(_type, listener) {
       listeners.add(listener);
@@ -198,19 +201,14 @@ export function openTestBridge(
     },
   };
   deliver({ house: 'address', address: current, navigated: false });
-  const host: HouseBridgeTestHost = {
+  const host: TestBridgeHost = {
     port: Promise.resolve(port),
     navigations,
-    ceremonies,
     address() {
       return current;
     },
     open(asked) {
       arrive(asked, false);
-    },
-    publish() {},
-    attachRuntime(runtime) {
-      deliver({ house: 'runtime' }, [runtime]);
     },
   };
   return { host, bridge: connectHouseBridge(host.port) };

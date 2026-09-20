@@ -16,7 +16,7 @@ declare global {
       runtime: MdRuntimeClient;
       runtimeHost?: MdRuntimeHost;
       adapter?: MemoryAdapter;
-      host: HouseBridgeTestHost;
+      host: Pick<HouseBridgeTestHost, 'navigations' | 'address' | 'open'>;
       bridge: HouseBridge;
       shell?: RuntimeShell;
       stop: () => void;

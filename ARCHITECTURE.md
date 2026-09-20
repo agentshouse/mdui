@@ -232,11 +232,17 @@ below the App's path. That remainder is a path, not a URL: query and fragment ar
 split off by the first `#` and then the first `?` in what remains. A path that is
 empty or `/` is the absence of an address below the App's path, including a
 delivery that is only query or only fragment, and reads Presentation State back.
-`//`, a leading `scheme:`, and `\` are path characters. The remainder names a
-screen and, for File, a Room locator and Document path; main resolves it against
-the Runtime and asks the bridge client to push or replace it. A re-push of the
-same File document keeps the query and fragment; a move to a different document
-or another screen drops them. An unrecognized remainder, including a malformed
+Production delivery is a path slice of the shell URL below the App root, so a
+remainder beginning `//`, a leading `scheme:`, or `\` reaches the App as the path
+it is. Navigate-admission refuses `//` as an open-redirect check and should. The
+published in-page test host applies that outbound grammar to inbound delivery,
+so those forms never arrive through it; that is
+[core#2076](https://github.com/agentshouse/core/issues/2076). The App parses the
+remainder as a path anyway, so it does not depend on the shell's filtering. The
+remainder names a screen and, for File, a Room locator and Document path; main
+resolves it against the Runtime and asks the bridge client to push or replace it.
+A re-push of the same File document keeps the query and fragment; a move to a
+different document or another screen drops them. An unrecognized remainder, including a malformed
 percent escape, is named on Rooms and does not yield to Presentation State.
 A remainder the shell refuses, including an over-long remainder, is dropped
 silently: `go` does not surface `HouseNavigationRefused`, and the App stays on
