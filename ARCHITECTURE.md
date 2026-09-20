@@ -5,12 +5,16 @@ appears here only as a callout linking to its requirement, ADR, or PRD in
 `agentshouse/mdruntime`.
 
 The repository is one npm project. `src/index.html` loads the TypeScript
-ES-module entry in `src/index.ts`; the entry loads the published MD Runtime
-and registers the field controls, Markdown renderer, Document View, and the
-Sync Status indicator without creating a Runtime instance. It exports
-`bindApp` so a host can mount the seven screens from the HTML template.
+ES-module entry in `src/index.ts`; the entry registers the field controls,
+Markdown renderer, Document View, and the Sync Status indicator. Main obtains
+its MD Runtime from `@agentshouse/mdruntime/client` over the Runtime port
+House's published `@agentshouse/app-bridge` client surfaces, and constructs
+no Runtime and no Adapter of its own. It exports `bindApp` so tests can mount
+the seven screens from the HTML template against the host entry serving the
+in-memory Adapter.
 Its application dependencies are `@agentshouse/mdruntime` at
-`0.1.0-alpha.7` and `@agentshouse/mdruntime-adapter` at `0.1.0-alpha.1`,
+`0.1.0-alpha.10`, `@agentshouse/app-bridge` at `0.1.0-alpha.1`, and
+`@agentshouse/mdruntime-adapter` at `0.1.0-alpha.1`,
 with published registry integrity in `package-lock.json`.
 The Runtime pin carries Model `0.1.0-alpha.5` and Query `0.1.0-alpha.3`.
 The renderer uses exactly `micromark@4.0.2` and
@@ -221,12 +225,12 @@ browser light and dark defaults. Browser acceptance is owned by
 
 `src/index.html` holds the seven screens as plain HTML. `bindApp(runtime)`
 clones that template, binds the Sync Status indicator, and fills each screen
-from the public MD Runtime API only. Presentation State is which screen is
+from the public remote client only. Presentation State is which screen is
 shown and which file Document View is bound to.
 
 ```js
 import { bindApp } from './app.js';
-bindApp(runtime);
+await bindApp(runtime);
 ```
 
 | Screen  | Public surfaces                                                                                                                           |
@@ -234,9 +238,9 @@ bindApp(runtime);
 | Rooms   | `rooms` / `observe('rooms')`, `observe('query')`, `types`, and Query Paths for each Room's file tree; opening a file binds Document View  |
 | Search  | Local Query narrowed by Room, MD Type, and one typed field value; substring over Query section text and field values; a result opens File |
 | File    | existing Document View                                                                                                                    |
-| Work    | `draft.list()` / `observe('drafts')` for every durable Draft, and `observe('queue')` per Room with outcome kind and Provider text         |
+| Work    | `draft.list()` / `observe('drafts')` for every durable Draft, and `observe('queue')` per Room with structured code and fields             |
 | Refusal | `observe('connection-refusal')`; `reauthorize` when `reauthorizationOffered`                                                              |
-| Storage | `observe('storage-loss')`                                                                                                                 |
+| Storage | `observe('storage-loss')` with the reported persistence answer                                                                            |
 | Log     | `log()` shown as text and downloaded as `synchronization-log.txt`                                                                         |
 
 Work renders the complete public Draft snapshot by Room locator and Path,

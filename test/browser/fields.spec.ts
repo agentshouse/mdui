@@ -1,11 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { MdRuntime } from '@agentshouse/mdruntime';
+import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import type { FieldControl } from '../../src/components/fields.js';
 
 declare global {
   interface Window {
     fieldsFixture: {
-      runtime: MdRuntime;
+      runtime: MdRuntimeClient;
       stop: () => void;
       changes: unknown[];
     };
@@ -15,11 +15,9 @@ declare global {
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const { createMdRuntime } = await import('@agentshouse/mdruntime');
     const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
     const helper = '/src/testing.js';
-    const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
-    const controller = new AbortController();
+    const { fixtureRoom, openTestRuntime, waitForRooms } = await import(helper);
     const person = '---\ntype: definition\nfields:\n  name:\n    kind: string\n---\n';
     const adapter = createMemoryAdapter({
       rooms: [
@@ -51,17 +49,11 @@ test.beforeEach(async ({ page }) => {
         }),
       ],
     });
-    const runtime = createMdRuntime({
-      ...runtimeOptions({
-        adapter,
-        requiredGuarantees: [],
-        signal: controller.signal,
-      }),
-    });
-    window.fieldsFixture = { runtime, stop: () => controller.abort(), changes: [] };
+    const opened = await openTestRuntime(adapter, { requiredGuarantees: [] });
+    window.fieldsFixture = { runtime: opened.runtime, stop: opened.stop, changes: [] };
     await waitForRooms(
-      runtime,
-      (rooms: ReturnType<typeof runtime.rooms>) =>
+      opened.runtime,
+      (rooms: readonly { roomVersion: string | null }[]) =>
         rooms.length === 2 && rooms.every((room) => room.roomVersion !== null),
     );
   });
@@ -73,10 +65,10 @@ test.afterEach(async ({ page }) => {
 
 async function mount(page: Page, kind: string, field: string, label: string, value?: unknown) {
   await page.evaluate(
-    ({ kind, field, label, value }) => {
+    async ({ kind, field, label, value }) => {
       const element = document.createElement(`md-${kind}-field`) as FieldControl;
       element.setAttribute('label', label);
-      element.bind(window.fieldsFixture.runtime, 'studio', 'project', field);
+      await element.bind(window.fieldsFixture.runtime, 'studio', 'project', field);
       if (value !== undefined) element.value = value;
       element.addEventListener('change', (event) => {
         window.fieldsFixture.changes.push((event as CustomEvent).detail);

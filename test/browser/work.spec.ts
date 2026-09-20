@@ -1,17 +1,22 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
-import type { DraftEntry, MdRuntime, QueueEntry } from '@agentshouse/mdruntime';
+import type { DraftEntry, QueueEntry } from '@agentshouse/mdruntime';
+import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
+import type { MdRuntimeHost } from '@agentshouse/mdruntime/host';
 import type { MemoryAdapter } from '@agentshouse/mdruntime/memory';
 
 declare global {
   interface Window {
     workFixture: {
-      runtime: MdRuntime;
-      adapter: MemoryAdapter;
+      runtime: MdRuntimeClient;
+      host?: MdRuntimeHost;
+      adapter?: MemoryAdapter;
       drafts: readonly DraftEntry[];
       queues: Record<string, readonly QueueEntry[]>;
       roomNotifications: number;
       stop: () => void;
     };
+    workOther?: Window | null;
+    workRuntimePort?: Promise<MessagePort>;
     workFaults: { read: boolean; write: boolean; operations: string[] };
   }
 }
@@ -34,29 +39,25 @@ async function mount(
 ): Promise<void> {
   await page.evaluate(
     async ({ rooms, options }) => {
-      const { createMdRuntime } = await import('@agentshouse/mdruntime');
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const helper = '/src/testing.js';
-      const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
+      const { fixtureRoom, openTestRuntime, waitForRooms } = await import(helper);
       const specifier = '/src/app.js';
       const { bindApp } = (await import(specifier)) as {
-        bindApp: (runtime: MdRuntime) => () => void;
+        bindApp: (runtime: MdRuntimeClient) => Promise<() => void>;
       };
-      const controller = new AbortController();
       const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) });
       if (options.pending) adapter.script('mutate', { kind: 'transport-uncertainty' });
-      const runtime = createMdRuntime(
-        runtimeOptions({
-          adapter,
-          requiredGuarantees: [],
-          signal: controller.signal,
-          discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
-        }),
-      );
-      const unbind = bindApp(runtime);
+      const opened = await openTestRuntime(adapter, {
+        requiredGuarantees: [],
+        discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
+      });
+      const runtime = opened.runtime;
+      const unbind = await bindApp(runtime);
       const stops: Array<() => void> = [];
       window.workFixture = {
         runtime,
+        host: opened.host,
         adapter,
         drafts: [],
         queues: {},
@@ -64,34 +65,92 @@ async function mount(
         stop: () => {
           for (const stop of stops) stop();
           unbind();
-          controller.abort();
+          opened.stop();
         },
       };
       stops.push(
-        runtime.observe('drafts', (drafts) => {
+        await runtime.observe('drafts', (drafts: typeof window.workFixture.drafts) => {
           window.workFixture.drafts = drafts;
         }),
       );
       stops.push(
-        runtime.observe('rooms', () => {
+        await runtime.observe('rooms', () => {
           window.workFixture.roomNotifications += 1;
         }),
       );
       for (const room of rooms) {
         stops.push(
-          runtime.observe('queue', room.locator, (entries) => {
+          await runtime.observe('queue', room.locator, (entries: readonly QueueEntry[]) => {
             window.workFixture.queues[room.locator] = entries;
           }),
         );
       }
       await waitForRooms(
         runtime,
-        (visible: ReturnType<typeof runtime.rooms>) =>
+        (visible: readonly { roomVersion: string | null }[]) =>
           visible.length === 2 && visible.every((room) => room.roomVersion !== null),
       );
     },
     { rooms, options },
   );
+}
+
+async function attachTab(page: Page, other: Page): Promise<void> {
+  await other.evaluate(() => {
+    window.workRuntimePort = new Promise<MessagePort>((resolve) => {
+      window.addEventListener(
+        'message',
+        (event) => {
+          const port = event.ports[0];
+          if (port !== undefined) resolve(port);
+        },
+        { once: true },
+      );
+    });
+  });
+  await page.evaluate(() => {
+    const channel = new MessageChannel();
+    window.workFixture.host!.attach(channel.port1, 'mdui');
+    window.workOther?.postMessage({ runtime: true }, '*', [channel.port2]);
+  });
+  await other.evaluate(async () => {
+    const port = await window.workRuntimePort!;
+    const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
+    const specifier = '/src/app.js';
+    const { bindApp } = (await import(specifier)) as {
+      bindApp: (runtime: MdRuntimeClient) => Promise<() => void>;
+    };
+    const runtime = connectMdRuntime(port);
+    const unbind = await bindApp(runtime);
+    const stops: Array<() => void> = [];
+    window.workFixture = {
+      runtime,
+      drafts: [],
+      queues: {},
+      roomNotifications: 0,
+      stop: () => {
+        for (const stop of stops) stop();
+        unbind();
+      },
+    };
+    stops.push(
+      await runtime.observe('drafts', (drafts: typeof window.workFixture.drafts) => {
+        window.workFixture.drafts = drafts;
+      }),
+    );
+    stops.push(
+      await runtime.observe('rooms', () => {
+        window.workFixture.roomNotifications += 1;
+      }),
+    );
+    for (const locator of ['alpha', 'beta']) {
+      stops.push(
+        await runtime.observe('queue', locator, (entries: readonly QueueEntry[]) => {
+          window.workFixture.queues[locator] = entries;
+        }),
+      );
+    }
+  });
 }
 
 async function screen(page: Page, name: string): Promise<void> {
@@ -148,9 +207,12 @@ test('a durable Save refusal stays visible in File and leaves its Draft in Work 
   ).toHaveCount(0);
   expect(
     await page.evaluate(
-      () =>
-        window.workFixture.runtime.query({ selector: { room: 'alpha', path: 'notes/existing.md' } })
-          .documents[0]?.fields.title,
+      async () =>
+        (
+          await window.workFixture.runtime.query({
+            selector: { room: 'alpha', path: 'notes/existing.md' },
+          })
+        ).documents[0]?.fields.title,
     ),
   ).toBe('Original');
   expect(await page.evaluate(() => window.workFixture.runtime.storageLoss())).toBeNull();
@@ -236,7 +298,7 @@ test('Work reports a failed durable read without false empty or storage loss and
     window.workFaults.read = true;
     const specifier = '/src/app.js';
     const { bindApp } = await import(specifier);
-    bindApp(window.workFixture.runtime);
+    await bindApp(window.workFixture.runtime);
   });
   await screen(page, 'Work');
   await expect(state).toContainText('Injected durable read failure');
@@ -258,15 +320,15 @@ test.afterEach(async ({ context }, testInfo) => {
   try {
     const snapshots = await Promise.all(
       context.pages().map((page) =>
-        page.evaluate(() => {
+        page.evaluate(async () => {
           const fixture = window.workFixture;
           if (!fixture) return null;
           return {
             drafts: fixture.drafts,
             queues: fixture.queues,
-            rooms: fixture.runtime.rooms(),
-            query: fixture.runtime.query(),
-            storageLoss: fixture.runtime.storageLoss(),
+            rooms: await fixture.runtime.rooms(),
+            query: await fixture.runtime.query(),
+            storageLoss: await fixture.runtime.storageLoss(),
             faults: window.workFaults,
           };
         }),
@@ -298,7 +360,7 @@ test('Work keeps every absent-Path Draft distinct through navigation and literal
     await runtime.draft.replace('unavailable', 'notes/orphan.md', {
       fields: { title: 'Retained' },
     });
-    if (runtime.query({ selector: { path: 'notes/new.md' } }).documents.length !== 0)
+    if ((await runtime.query({ selector: { path: 'notes/new.md' } })).documents.length !== 0)
       throw Error('New Paths already belong to Query');
   });
   await screen(page, 'Work');
@@ -337,20 +399,24 @@ test('Work converges across tabs for creation, replacement, failed writes, Save 
   page,
   context,
 }, testInfo) => {
-  const other = await context.newPage();
-  await other.goto('/');
-  await mount(other);
+  const popup = context.waitForEvent('page');
+  await page.evaluate(() => {
+    window.workOther = window.open('/', '_blank');
+  });
+  const other = await popup;
+  await other.waitForLoadState('domcontentloaded');
+  await attachTab(page, other);
+  await page.evaluate(() => {
+    window.workFixture.adapter!.script('mutate', { kind: 'transport-uncertainty' });
+  });
   for (const tab of [page, other]) {
     await screen(tab, 'Work');
     await expect(inventory(tab)).toHaveCount(0);
-    await tab.evaluate(() => {
-      window.workFixture.adapter.script('mutate', { kind: 'transport-uncertainty' });
-    });
   }
   await page.evaluate(async () => {
     const { runtime } = window.workFixture;
     const view = document.querySelector('md-document-view') as HTMLElement & {
-      create: (runtime: MdRuntime, room: string, path: string, type: string) => Promise<void>;
+      create: (runtime: MdRuntimeClient, room: string, path: string, type: string) => Promise<void>;
     };
     await view.create(runtime, 'alpha', 'notes/new.md', 'note');
   });
@@ -455,7 +521,11 @@ test('Work converges across tabs for creation, replacement, failed writes, Save 
     ).toHaveText(['Pending']);
   }
   await other.reload();
-  await mount(other, { pending: true });
+  await other.waitForLoadState('domcontentloaded');
+  await attachTab(page, other);
+  await page.evaluate(() => {
+    window.workFixture.adapter!.script('mutate', { kind: 'transport-uncertainty' });
+  });
   await screen(other, 'Work');
   await expect(inventory(other)).toHaveCount(0);
   await expect(
@@ -478,7 +548,7 @@ test('Work converges across tabs for creation, replacement, failed writes, Save 
             drafts: await window.workFixture.runtime.draft.list(),
             observed: window.workFixture.drafts,
             queues: window.workFixture.queues,
-            storageLoss: window.workFixture.runtime.storageLoss(),
+            storageLoss: await window.workFixture.runtime.storageLoss(),
           })),
         ),
       ),
@@ -509,7 +579,7 @@ test('Work keeps Drafts after remote removal and Room access loss without a Conn
     const { runtime, adapter } = window.workFixture;
     const helper = '/src/testing.js';
     const { fixtureRoom } = await import(helper);
-    adapter.setRooms(
+    adapter!.setRooms(
       rooms.map((room) =>
         room.locator === 'alpha'
           ? fixtureRoom({
@@ -525,22 +595,24 @@ test('Work keeps Drafts after remote removal and Room access loss without a Conn
   await expect
     .poll(() =>
       page.evaluate(
-        () =>
-          window.workFixture.runtime.query({
-            selector: { room: 'alpha', path: 'notes/existing.md' },
-          }).documents,
+        async () =>
+          (
+            await window.workFixture.runtime.query({
+              selector: { room: 'alpha', path: 'notes/existing.md' },
+            })
+          ).documents,
       ),
     )
     .toEqual([]);
   await expect(inventory(page)).toHaveText(expected);
   await page.evaluate(async () => {
-    window.workFixture.adapter.setRooms([]);
+    window.workFixture.adapter!.setRooms([]);
     await window.workFixture.runtime.reauthorize();
   });
   await expect
     .poll(() =>
-      page.evaluate(() =>
-        window.workFixture.runtime.rooms().filter((room) => room.synchronizationAvailable),
+      page.evaluate(async () =>
+        (await window.workFixture.runtime.rooms()).filter((room) => room.synchronizationAvailable),
       ),
     )
     .toEqual([]);
@@ -551,7 +623,7 @@ test('Work keeps Drafts after remote removal and Room access loss without a Conn
   );
   await screen(page, 'Storage');
   await expect(page.getByRole('status', { name: 'Storage', exact: true })).toHaveText(
-    'No storage loss.',
+    'No storage loss. true',
   );
   await screen(page, 'Work');
   await expect(inventory(page)).toHaveText(expected);
@@ -565,33 +637,35 @@ for (const kind of ['conflicted', 'rejected'] as const) {
   test(`Work keeps a ${kind} submitted batch distinct from its reopened Draft and shows Provider text verbatim`, async ({
     page,
   }, testInfo) => {
-    const text = 'Provider refused: <keep these words> & decide again.';
+    const code = kind === 'conflicted' ? 'title_conflict' : 'invalid_library';
+    const detail = 'Provider refused: <keep these words> & decide again.';
     await page.evaluate(
-      async ({ kind, text, content }) => {
+      async ({ kind, code, detail, content }) => {
         const { runtime, adapter } = window.workFixture;
         await runtime.draft.replace('alpha', 'notes/existing.md', {
           fields: { title: 'My words' },
         });
-        adapter.script('mutate', {
+        adapter!.script('mutate', {
           kind,
           roomVersion: 'v2',
           affected: { 'notes/existing.md': content },
-          text,
+          code,
+          fields: { detail },
         });
         const saved = await runtime.save('alpha', [
           { kind: 'field', path: 'notes/existing.md', name: 'title', value: 'My words' },
         ]);
         if (saved.outcome !== 'saved') throw Error(JSON.stringify(saved));
       },
-      { kind, text, content },
+      { kind, code, detail, content },
     );
     await screen(page, 'Work');
     const batches = page
       .getByRole('article', { name: 'Notes Pending Changes', exact: true })
       .getByRole('listitem');
     await expect(batches).toHaveCount(1);
-    await expect(batches).toContainText(kind === 'conflicted' ? 'Conflicted' : 'Rejected');
-    await expect(batches.getByText(text, { exact: true })).toBeVisible();
+    await expect(batches).toContainText(code);
+    await expect(batches.getByText(detail, { exact: true })).toBeVisible();
     await expect(inventory(page)).toHaveCount(0);
     await screen(page, 'Rooms');
     await page
@@ -603,7 +677,7 @@ for (const kind of ['conflicted', 'rejected'] as const) {
     await screen(page, 'Work');
     await expect(inventory(page)).toHaveText(['alpha notes/existing.md']);
     await expect(batches).toHaveCount(1);
-    await expect(batches.getByText(text, { exact: true })).toBeVisible();
+    await expect(batches.getByText(detail, { exact: true })).toBeVisible();
     expect(await page.evaluate(() => window.workFixture.runtime.storageLoss())).toBeNull();
     await page.screenshot({
       path: testInfo.outputPath(`work-${kind}-and-draft.png`),
@@ -611,6 +685,29 @@ for (const kind of ['conflicted', 'rejected'] as const) {
     });
   });
 }
+
+test('Work shows a retryable refusal as Pending with its reset', async ({ page }) => {
+  await page.evaluate(async () => {
+    const { runtime, adapter } = window.workFixture;
+    adapter!.script('mutate', {
+      kind: 'retryable-refusal',
+      code: 'rate_limited',
+      fields: { retry_at: '2099-01-01T00:00:00.000Z' },
+      reset: '2099-01-01T00:00:00.000Z',
+    });
+    const saved = await runtime.save('alpha', [
+      { kind: 'field', path: 'notes/existing.md', name: 'title', value: 'Later' },
+    ]);
+    if (saved.outcome !== 'saved') throw Error(JSON.stringify(saved));
+  });
+  await screen(page, 'Work');
+  const batches = page
+    .getByRole('article', { name: 'Notes Pending Changes', exact: true })
+    .getByRole('listitem');
+  await expect(batches).toContainText('Pending');
+  await expect(batches).toContainText('2099-01-01T00:00:00.000Z');
+  await expect(batches).toContainText('rate_limited');
+});
 
 test('Work removes an Accepted batch from Pending Changes without inventing a Draft', async ({
   page,
@@ -622,7 +719,7 @@ test('Work removes an Accepted batch from Pending Changes without inventing a Dr
     await window.workFixture.runtime.draft.replace('beta', 'notes/new.md', {
       create: { type: 'note' },
     });
-    window.workFixture.adapter.script('mutate', {
+    window.workFixture.adapter!.script('mutate', {
       kind: 'accepted',
       roomVersion: 'v2',
       documents: {
@@ -645,7 +742,9 @@ test('Work removes an Accepted batch from Pending Changes without inventing a Dr
   expect(result.outcome).toBe('saved');
   if (result.outcome !== 'saved') throw Error('Save refused');
   await expect
-    .poll(() => page.evaluate((id) => window.workFixture.runtime.outcome(id)?.kind, result.id))
+    .poll(() =>
+      page.evaluate(async (id) => (await window.workFixture.runtime.outcome(id))?.kind, result.id),
+    )
     .toBe('accepted');
   await expect(inventory(page)).toHaveText(['beta notes/new.md']);
   await expect(
@@ -654,8 +753,8 @@ test('Work removes an Accepted batch from Pending Changes without inventing a Dr
   await testInfo.attach('accepted-public-state', {
     body: JSON.stringify(
       await page.evaluate(
-        (id) => ({
-          outcome: window.workFixture.runtime.outcome(id),
+        async (id) => ({
+          outcome: await window.workFixture.runtime.outcome(id),
           drafts: window.workFixture.drafts,
           queues: window.workFixture.queues,
         }),

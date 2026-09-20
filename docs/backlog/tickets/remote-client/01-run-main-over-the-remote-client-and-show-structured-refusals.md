@@ -1,6 +1,6 @@
 # 01-run-main-over-the-remote-client-and-show-structured-refusals - Run main over the remote client of the Provider's Runtime host and show every Provider refusal as its structured code and fields
 
-Status: ready-for-agent
+Status: resolved
 
 ## Frame
 
@@ -47,12 +47,12 @@ main imports no other Runtime entry.
 
 ## Acceptance criteria
 
-- [ ] Main receives the Runtime port the bridge client surfaces from the transfer over the bridge port, connects the client entry to it and reaches every Room, Document, Draft, Pending Change, History entry and Log entry through that entry; it constructs no Runtime and no Adapter, and it uses the bridge client for nothing else.
-- [ ] Every Runtime member is awaited, no screen or component reads a synchronous result, and the existing component and screen proofs pass in meaning over the client entry against the host entry serving the in-memory Adapter in a real browser.
-- [ ] A scripted Rejected and a scripted Conflicted outcome appear in Document View editing, on the Work screen and in the Sync Status indicator as the scripted code and fields, no sentence composed in this repository stands in for them, and a scripted retryable refusal shows Pending with its reset.
-- [ ] The Refusal screen shows the protocol mismatch as a Connection Refusal beside the four it shows today, and the Storage screen shows the storage loss statement beside the reported persistence answer.
-- [ ] Opening several files in turn and unbinding main leave no live subscription on the host for the closed observations, including an observation whose subscription resolves after the rebind or the unbind that closed it.
-- [ ] The neutrality lane's green case is the client entry and main imports no other Runtime entry; outside the test placement, no Runtime or Adapter is constructed, no refusal text is read and no Runtime member is called synchronously at the merge boundary.
+- [x] Main receives the Runtime port the bridge client surfaces from the transfer over the bridge port, connects the client entry to it and reaches every Room, Document, Draft, Pending Change, History entry and Log entry through that entry; it constructs no Runtime and no Adapter, and it uses the bridge client for nothing else.
+- [x] Every Runtime member is awaited, no screen or component reads a synchronous result, and the existing component and screen proofs pass in meaning over the client entry against the host entry serving the in-memory Adapter in a real browser.
+- [x] A scripted Rejected and a scripted Conflicted outcome appear in Document View editing, on the Work screen and in the Sync Status indicator as the scripted code and fields, no sentence composed in this repository stands in for them, and a scripted retryable refusal shows Pending with its reset.
+- [x] The Refusal screen shows the protocol mismatch as a Connection Refusal beside the four it shows today, and the Storage screen shows the storage loss statement beside the reported persistence answer.
+- [x] Opening several files in turn and unbinding main leave no live subscription on the host for the closed observations, including an observation whose subscription resolves after the rebind or the unbind that closed it.
+- [x] The neutrality lane's green case is the client entry and main imports no other Runtime entry; outside the test placement, no Runtime or Adapter is constructed, no refusal text is read and no Runtime member is called synchronously at the merge boundary.
 
 ## Mines
 

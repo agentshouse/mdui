@@ -3,16 +3,16 @@ import type {
   Change,
   ChangeBatch,
   HistoryResult,
-  MdRuntime,
   MutationRequest,
   QueryDocument,
   QueueEntry,
 } from '@agentshouse/mdruntime';
+import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import type { MemoryAdapter } from '@agentshouse/mdruntime/memory';
 
 type DocumentViewElement = HTMLElement & {
-  bind: (runtime: MdRuntime, room: string, path: string) => void;
-  create: (runtime: MdRuntime, room: string, path: string, type: string) => Promise<void>;
+  bind: (runtime: MdRuntimeClient, room: string, path: string) => void;
+  create: (runtime: MdRuntimeClient, room: string, path: string, type: string) => Promise<void>;
 };
 
 type HistoryRequest = {
@@ -30,7 +30,7 @@ type PendingHistory = {
 declare global {
   interface Window {
     viewFixture: {
-      runtime: MdRuntime;
+      runtime: MdRuntimeClient;
       adapter: MemoryAdapter;
       history: HistoryRequest[];
       pendingHistory: PendingHistory[];
@@ -193,7 +193,8 @@ const studio = {
   },
 };
 
-const refusalText = 'UNIQUE_PROVIDER_REFUSAL_TEXT';
+const refusalCode = 'UNIQUE_PROVIDER_REFUSAL_CODE';
+const refusalFields = { detail: 'UNIQUE_PROVIDER_REFUSAL_FIELDS' };
 
 async function start(
   page: Page,
@@ -206,11 +207,9 @@ async function start(
   await page.goto('/');
   await page.evaluate(
     async ({ rooms, options }) => {
-      const { createMdRuntime } = await import('@agentshouse/mdruntime');
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const helper = '/src/testing.js';
-      const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
-      const controller = new AbortController();
+      const { fixtureRoom, openTestRuntime, waitForRooms } = await import(helper);
       const adapter = createMemoryAdapter({
         rooms: rooms.map(fixtureRoom) as never,
         ...(options.providerLimits === undefined
@@ -222,24 +221,20 @@ async function start(
         submissions.push(request);
         return { kind: 'transport-uncertainty' };
       });
-      const runtime = createMdRuntime(
-        runtimeOptions({
-          adapter,
-          requiredGuarantees: [],
-          signal: controller.signal,
-          discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
-        }),
-      );
+      const opened = await openTestRuntime(adapter, {
+        requiredGuarantees: [],
+        discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
+      });
       window.viewFixture = {
-        runtime,
+        runtime: opened.runtime,
         adapter,
         history: [],
         pendingHistory: [],
         historyFails: false,
         submissions,
-        stop: () => controller.abort(),
+        stop: opened.stop,
       };
-      await waitForRooms(runtime, (visible: ReturnType<typeof runtime.rooms>) =>
+      await waitForRooms(opened.runtime, (visible: readonly { roomVersion: string | null }[]) =>
         visible.some((room) => room.roomVersion !== null),
       );
     },
@@ -264,7 +259,8 @@ async function mount(page: Page, path: string, room = 'studio') {
 
 async function queried(page: Page, path: string): Promise<QueryDocument> {
   return page.evaluate(
-    (path) => window.viewFixture.runtime.query({ selector: { room: 'studio', path } }).documents[0],
+    async (path) =>
+      (await window.viewFixture.runtime.query({ selector: { room: 'studio', path } })).documents[0],
     path,
   );
 }
@@ -278,9 +274,9 @@ async function queueOf(
 ): Promise<
   { id: string; changes: Change[]; preconditions: ChangeBatch['preconditions']; kind: string }[]
 > {
-  return page.evaluate(() => {
+  return page.evaluate(async () => {
     let entries: QueueEntry[] = [];
-    const stop = window.viewFixture.runtime.observe('queue', 'studio', (value) => {
+    const stop = await window.viewFixture.runtime.observe('queue', 'studio', (value) => {
       entries = [...value];
     });
     stop();
@@ -632,7 +628,7 @@ test('Conflicted head restores App Creator values, marks Provider current parts,
 }, testInfo) => {
   await start(page, [studio], { discoveryIntervalMs: 80 });
   await page.evaluate(
-    ({ text, content }) => {
+    ({ code, fields, content }) => {
       let first = true;
       window.viewFixture.adapter.script('mutate', () => {
         if (first) {
@@ -641,13 +637,18 @@ test('Conflicted head restores App Creator values, marks Provider current parts,
             kind: 'conflicted' as const,
             roomVersion: 'v2',
             affected: { 'work/alpha.md': content },
-            text,
+            code,
+            fields,
           };
         }
         return { kind: 'transport-uncertainty' as const };
       });
     },
-    { text: refusalText, content: providerAlpha },
+    {
+      code: refusalCode,
+      fields: refusalFields,
+      content: providerAlpha,
+    },
   );
   await mount(page, 'work/alpha.md');
   await page.getByRole('textbox', { name: 'title', exact: true }).fill('App Creator title');
@@ -701,7 +702,7 @@ test('Conflicted head restores App Creator values, marks Provider current parts,
   await expect(page.getByText(`Current value: ${visible.fields.title}`)).toBeVisible();
   await expect(page.getByText(`Current value: ${visible.sections.Summary}`)).toBeVisible();
   await expect(page.getByText(`Current value: ${visible.preamble}`)).toBeVisible();
-  await expect(page.getByText(refusalText, { exact: true })).toBeVisible();
+  await expect(page.getByText(refusalCode, { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 360, height: 900 });
   await page.screenshot({ path: testInfo.outputPath('conflict-360.png'), fullPage: true });
   const head = (await queueOf(page))[0].id;
@@ -709,14 +710,19 @@ test('Conflicted head restores App Creator values, marks Provider current parts,
   await expect.poll(async () => (await queueOf(page))[0]?.id !== head).toBe(true);
   expect((await queueOf(page))[0].kind).toBe('pending');
   await page.evaluate(
-    ({ text, content }) => {
+    ({ code, fields, content }) => {
       window.viewFixture.adapter.script('mutate', {
         kind: 'rejected',
         affected: { 'work/alpha.md': content },
-        text,
+        code,
+        fields,
       });
     },
-    { text: refusalText, content: providerAlpha },
+    {
+      code: refusalCode,
+      fields: refusalFields,
+      content: providerAlpha,
+    },
   );
   await expect.poll(async () => (await queueOf(page))[0]?.kind).toBe('rejected');
   await page.getByRole('button', { name: 'Discard', exact: true }).click();
@@ -830,15 +836,20 @@ test('Conflicted marks only Provider-changed parts including ones the App Creato
 }) => {
   await start(page, [studio], { discoveryIntervalMs: 80 });
   await page.evaluate(
-    ({ text, content }) => {
+    ({ code, fields, content }) => {
       window.viewFixture.adapter.script('mutate', {
         kind: 'conflicted' as const,
         roomVersion: 'v2',
         affected: { 'work/alpha.md': content },
-        text,
+        code,
+        fields,
       });
     },
-    { text: refusalText, content: providerAlpha },
+    {
+      code: refusalCode,
+      fields: refusalFields,
+      content: providerAlpha,
+    },
   );
   await mount(page, 'work/alpha.md');
   await page.getByRole('textbox', { name: 'title', exact: true }).fill('App Creator title');
@@ -1010,15 +1021,20 @@ test('a newer Draft keeps its values and restores refused parts it does not alre
 }) => {
   await start(page, [studio], { discoveryIntervalMs: 80 });
   await page.evaluate(
-    ({ text, content }) => {
+    ({ code, fields, content }) => {
       window.viewFixture.adapter.script('mutate', {
         kind: 'conflicted' as const,
         roomVersion: 'v2',
         affected: { 'work/alpha.md': content },
-        text,
+        code,
+        fields,
       });
     },
-    { text: refusalText, content: providerAlpha },
+    {
+      code: refusalCode,
+      fields: refusalFields,
+      content: providerAlpha,
+    },
   );
   await mount(page, 'work/alpha.md');
   await page.getByRole('textbox', { name: 'title', exact: true }).fill('Refused title');
@@ -1348,7 +1364,7 @@ test('Conflicted whole replacement restores exact Markdown and shows affected Pr
 }) => {
   await start(page, [studio], { discoveryIntervalMs: 80 });
   await page.evaluate(
-    ({ text, content }) => {
+    ({ code, fields, content }) => {
       let first = true;
       window.viewFixture.adapter.script('mutate', (request: MutationRequest) => {
         window.viewFixture.submissions?.push(request);
@@ -1358,13 +1374,18 @@ test('Conflicted whole replacement restores exact Markdown and shows affected Pr
             kind: 'conflicted' as const,
             roomVersion: 'v2',
             affected: { 'work/alpha.md': content },
-            text,
+            code,
+            fields,
           };
         }
         return { kind: 'transport-uncertainty' as const };
       });
     },
-    { text: refusalText, content: providerAlpha },
+    {
+      code: refusalCode,
+      fields: refusalFields,
+      content: providerAlpha,
+    },
   );
   await mount(page, 'work/alpha.md');
   await page.getByRole('button', { name: 'Edit whole text', exact: true }).click();
@@ -1379,7 +1400,7 @@ test('Conflicted whole replacement restores exact Markdown and shows affected Pr
   await documentSave(page).click();
   await expect.poll(async () => (await queueOf(page))[0]?.kind).toBe('conflicted');
   await expect.poll(async () => draftOf(page, 'work/alpha.md')).toEqual({ whole: userWhole });
-  await expect(page.getByText(refusalText, { exact: true })).toBeVisible();
+  await expect(page.getByText(refusalCode, { exact: true })).toBeVisible();
   await expect(page.getByText(providerAlpha, { exact: true })).toBeVisible();
   expect((await queried(page, 'work/alpha.md')).content).not.toBe(providerAlpha);
   const submitted = (await submittedBatches(page)).at(-1);
@@ -1391,17 +1412,22 @@ test('Conflicted whole replacement restores exact Markdown and shows affected Pr
   await expect.poll(async () => (await queueOf(page))[0]?.id !== head).toBe(true);
   expect((await queueOf(page))[0].kind).toBe('pending');
   await page.evaluate(
-    ({ text, content }) => {
+    ({ code, fields, content }) => {
       window.viewFixture.adapter.script('mutate', (request: MutationRequest) => {
         window.viewFixture.submissions?.push(request);
         return {
           kind: 'rejected' as const,
           affected: { 'work/alpha.md': content },
-          text,
+          code,
+          fields,
         };
       });
     },
-    { text: refusalText, content: providerAlpha },
+    {
+      code: refusalCode,
+      fields: refusalFields,
+      content: providerAlpha,
+    },
   );
   await expect.poll(async () => (await queueOf(page))[0]?.kind).toBe('rejected');
   await page.getByRole('button', { name: 'Discard', exact: true }).click();

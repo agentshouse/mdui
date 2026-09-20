@@ -3,15 +3,15 @@ import type {
   Change,
   HistoryResult,
   HistoryRevision,
-  MdRuntime,
   MdType,
   QueryDocument,
   QueueEntry,
   SaveRefusal,
 } from '@agentshouse/mdruntime';
+import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import { type FieldControl, type FieldDefinition } from './fields.js';
 import { internalPath, relativePath } from './links.js';
-import { mdTypes } from './runtime.js';
+import { mdTypes, observation, refusalParts } from './runtime.js';
 import './fields.js';
 import './markdown.js';
 import { viewStyles } from './theme.js';
@@ -217,7 +217,8 @@ function message(kind: 'error' | 'current' | 'refusal', text: string): HTMLEleme
 
 export class DocumentView extends HTMLElement {
   static observedAttributes = ['room', 'path', 'label'];
-  private runtime: MdRuntime | undefined;
+  private runtime: MdRuntimeClient | undefined;
+  private watchGeneration = 0;
   private current: QueryDocument | undefined;
   private roomState: AppRoom | undefined;
   private unobserve: (() => void) | undefined;
@@ -241,14 +242,14 @@ export class DocumentView extends HTMLElement {
   private writeChain: Promise<void> = Promise.resolve();
   private readonly root = this.attachShadow({ mode: 'open' });
 
-  bind(runtime: MdRuntime, room: string, path: string): void {
+  bind(runtime: MdRuntimeClient, room: string, path: string): void {
     this.runtime = runtime;
     this.setAttribute('room', room);
     this.setAttribute('path', path);
     this.watch();
   }
 
-  async create(runtime: MdRuntime, room: string, path: string, type: string): Promise<void> {
+  async create(runtime: MdRuntimeClient, room: string, path: string, type: string): Promise<void> {
     this.runtime = runtime;
     this.setAttribute('room', room);
     this.setAttribute('path', path);
@@ -321,8 +322,8 @@ export class DocumentView extends HTMLElement {
 
   private definition(): MdType | undefined {
     const type = this.current?.type ?? this.draft?.create?.type;
-    if (type === undefined || this.runtime === undefined) return;
-    return mdTypes(this.runtime.types(this.roomName())).find((entry) => entry.name === type);
+    if (type === undefined) return;
+    return mdTypes(this.roomState?.model).find((entry) => entry.name === type);
   }
 
   private refusedHead(): QueueEntry | undefined {
@@ -345,35 +346,58 @@ export class DocumentView extends HTMLElement {
     this.current = undefined;
     this.roomState = undefined;
     this.queue = [];
+    const generation = (this.watchGeneration += 1);
+    this.unobserve = () => {
+      this.watchGeneration += 1;
+    };
     if (!this.isConnected || this.runtime === undefined) return;
+    const runtime = this.runtime;
     const room = this.roomName();
     const path = this.filePath();
-    this.draft = asDraft(this.runtime.draft.read(room, path));
-    let queried = false;
-    const stopQuery = this.runtime.observe('query', { selector: { room, path } }, (result) => {
-      const current = result.documents[0];
-      if (queried && equal(this.current, current)) return;
-      queried = true;
-      this.current = current;
-      this.present();
-    });
-    const stopRooms = this.runtime.observe('rooms', (rooms) => {
-      const state = rooms.find((entry) => entry.locator === room);
-      if (equal(this.roomState, state)) return;
-      this.roomState = state;
-      this.present();
-    });
-    const stopQueue = this.runtime.observe('queue', room, (entries) => {
-      if (equal(this.queue, entries)) return;
-      this.queue = entries;
-      void this.restoreRefused();
-      this.present();
-    });
-    this.unobserve = () => {
-      stopQuery();
-      stopRooms();
-      stopQueue();
-    };
+    void (async () => {
+      const value = await runtime.draft.read(room, path);
+      if (generation !== this.watchGeneration) return;
+      this.draft = asDraft(value);
+      let queried = false;
+      const stops = [
+        observation(
+          runtime.observe('query', { selector: { room, path } }, (result) => {
+            if (generation !== this.watchGeneration) return;
+            const current = result.documents[0];
+            if (queried && equal(this.current, current)) return;
+            queried = true;
+            this.current = current;
+            this.present();
+          }),
+        ),
+        observation(
+          runtime.observe('rooms', (rooms) => {
+            if (generation !== this.watchGeneration) return;
+            const state = rooms.find((entry) => entry.locator === room);
+            if (equal(this.roomState, state)) return;
+            this.roomState = state;
+            this.present();
+          }),
+        ),
+        observation(
+          runtime.observe('queue', room, (entries) => {
+            if (generation !== this.watchGeneration) return;
+            if (equal(this.queue, entries)) return;
+            this.queue = entries;
+            void this.restoreRefused();
+            this.present();
+          }),
+        ),
+      ];
+      if (generation !== this.watchGeneration) {
+        for (const stop of stops) stop();
+        return;
+      }
+      this.unobserve = () => {
+        this.watchGeneration += 1;
+        for (const stop of stops) stop();
+      };
+    })();
   }
 
   private async restoreRefused(): Promise<void> {
@@ -532,8 +556,9 @@ export class DocumentView extends HTMLElement {
     panel.setAttribute('role', 'region');
     panel.setAttribute('aria-label', 'Document');
     const head = this.refusedHead();
-    if (head !== undefined && 'text' in head.outcome)
-      panel.append(message('refusal', head.outcome.text));
+    if (head !== undefined && 'code' in head.outcome) {
+      for (const part of refusalParts(head.outcome)) panel.append(message('refusal', part));
+    }
     if (
       head !== undefined &&
       'affected' in head.outcome &&
@@ -633,7 +658,7 @@ export class DocumentView extends HTMLElement {
   private renderDocument(body: HTMLElement, file: QueryDocument): void {
     const runtime = this.runtime!;
     const room = file.room;
-    const definition = mdTypes(runtime.types(room)).find((entry) => entry.name === file.type);
+    const definition = mdTypes(this.roomState?.model).find((entry) => entry.name === file.type);
     if (this.editor?.part === 'whole') {
       body.append(this.textPart(this.editor.name, this.editor.live, true, 'whole'));
       return;
@@ -678,7 +703,7 @@ export class DocumentView extends HTMLElement {
       const control = document.createElement(`md-${spec.kind}-field`) as FieldControl;
       control.setAttribute('label', name);
       control.toggleAttribute('disabled', !enabled);
-      control.bind(runtime, room, definition.name, name);
+      control.bindDefinition(runtime, room, name, spec);
       const value = this.displayedField(name, spec);
       if (value !== undefined) control.value = value;
       if (enabled) {
@@ -892,7 +917,7 @@ export class DocumentView extends HTMLElement {
     }
     this.localRefusal = undefined;
     this.editor = undefined;
-    this.draft = asDraft(this.runtime.draft.read(this.roomName(), this.filePath()));
+    this.draft = asDraft(await this.runtime.draft.read(this.roomName(), this.filePath()));
     if (
       moved !== undefined &&
       moved !== this.filePath() &&
@@ -978,21 +1003,25 @@ export class DocumentView extends HTMLElement {
     panel.addEventListener('toggle', () => {
       this.historyOpened = panel.open;
       if (panel.open) {
-        if (!this.historyOpenHandled) {
-          this.historyOpenHandled = true;
-          if (this.historyKind === undefined) void this.loadHistory(file);
-        }
+        this.requestHistory(file);
         return;
       }
       this.historyOpenHandled = false;
       if (this.historyKind === undefined) this.historyFailure = undefined;
     });
+    if (this.historyOpened) this.requestHistory(file);
     this.renderHistory(panel, file);
     return panel;
   }
 
   private currentFile(file: QueryDocument): boolean {
     return this.getAttribute('room') === file.room && this.getAttribute('path') === file.path;
+  }
+
+  private requestHistory(file: QueryDocument): void {
+    if (this.historyOpenHandled) return;
+    this.historyOpenHandled = true;
+    if (this.historyKind === undefined) void this.loadHistory(file);
   }
 
   private async loadHistory(file: QueryDocument, pageToken?: string): Promise<void> {

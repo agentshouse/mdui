@@ -1,4 +1,6 @@
-import type { MdRuntime, SyncStatus } from '@agentshouse/mdruntime';
+import type { SyncStatus } from '@agentshouse/mdruntime';
+import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
+import { observation, refusalParts } from './runtime.js';
 import { statusStyles } from './theme.js';
 
 const states = {
@@ -8,11 +10,11 @@ const states = {
 } as const;
 
 export class SyncStatusIndicator extends HTMLElement {
-  private runtime: MdRuntime | undefined;
+  private runtime: MdRuntimeClient | undefined;
   private unobserve: (() => void) | undefined;
   private readonly root = this.attachShadow({ mode: 'open' });
 
-  bind(runtime: MdRuntime): void {
+  bind(runtime: MdRuntimeClient): void {
     this.runtime = runtime;
     this.watch();
   }
@@ -30,7 +32,9 @@ export class SyncStatusIndicator extends HTMLElement {
     this.unobserve?.();
     this.unobserve = undefined;
     if (!this.isConnected || this.runtime === undefined) return;
-    this.unobserve = this.runtime.observe('sync-status', (status) => this.present(status));
+    this.unobserve = observation(
+      this.runtime.observe('sync-status', (status) => this.present(status)),
+    );
   }
 
   private present(status: SyncStatus): void {
@@ -43,11 +47,19 @@ export class SyncStatusIndicator extends HTMLElement {
     state.className = 'state';
     state.textContent = states[status.state];
     region.append(state);
-    if (status.attentionRequired) {
-      const attention = document.createElement('p');
-      attention.className = 'attention';
-      attention.textContent = 'Attention required';
-      region.append(attention);
+    for (const entry of status.attentionRequired) {
+      if (entry.refusal === null) continue;
+      for (const part of refusalParts(entry.refusal)) {
+        const attention = document.createElement('p');
+        attention.className = 'attention';
+        attention.textContent = part;
+        region.append(attention);
+      }
+    }
+    if (status.reset !== null) {
+      const reset = document.createElement('p');
+      reset.textContent = status.reset;
+      region.append(reset);
     }
     if (status.lastCompleted !== null) {
       const completed = document.createElement('p');

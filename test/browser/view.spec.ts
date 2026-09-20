@@ -1,14 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import type {
-  HistoryResult,
-  MdRuntime,
-  MutationRequest,
-  QueryDocument,
-} from '@agentshouse/mdruntime';
+import type { HistoryResult, MutationRequest, QueryDocument } from '@agentshouse/mdruntime';
+import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import type { MemoryAdapter } from '@agentshouse/mdruntime/memory';
 
 type DocumentViewElement = HTMLElement & {
-  bind: (runtime: MdRuntime, room: string, path: string) => void;
+  bind: (runtime: MdRuntimeClient, room: string, path: string) => void;
 };
 
 type HistoryRequest = {
@@ -26,7 +22,7 @@ type PendingHistory = {
 declare global {
   interface Window {
     viewFixture: {
-      runtime: MdRuntime;
+      runtime: MdRuntimeClient;
       adapter: MemoryAdapter;
       history: HistoryRequest[];
       pendingHistory: PendingHistory[];
@@ -99,11 +95,9 @@ async function start(page: Page, rooms: unknown[], options: { history?: boolean 
   await page.goto('/');
   await page.evaluate(
     async ({ rooms, options }) => {
-      const { createMdRuntime } = await import('@agentshouse/mdruntime');
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const helper = '/src/testing.js';
-      const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
-      const controller = new AbortController();
+      const { fixtureRoom, openTestRuntime, waitForRooms } = await import(helper);
       const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) as never });
       const history: HistoryRequest[] = [];
       if (options.history) {
@@ -122,23 +116,19 @@ async function start(page: Page, rooms: unknown[], options: { history?: boolean 
           };
         });
       }
-      const runtime = createMdRuntime(
-        runtimeOptions({
-          adapter,
-          requiredGuarantees: [],
-          signal: controller.signal,
-          discoveryIntervalMs: 60_000,
-        }),
-      );
+      const opened = await openTestRuntime(adapter, {
+        requiredGuarantees: [],
+        discoveryIntervalMs: 60_000,
+      });
       window.viewFixture = {
-        runtime,
+        runtime: opened.runtime,
         adapter,
         history,
         pendingHistory: [],
         historyFails: false,
-        stop: () => controller.abort(),
+        stop: opened.stop,
       };
-      await waitForRooms(runtime, (visible: ReturnType<typeof runtime.rooms>) =>
+      await waitForRooms(opened.runtime, (visible: readonly { roomVersion: string | null }[]) =>
         visible.some((room) => room.roomVersion !== null),
       );
     },
@@ -163,7 +153,8 @@ async function mount(page: Page, path: string, room = 'studio') {
 
 async function queried(page: Page, path: string): Promise<QueryDocument> {
   return page.evaluate(
-    (path) => window.viewFixture.runtime.query({ selector: { room: 'studio', path } }).documents[0],
+    async (path) =>
+      (await window.viewFixture.runtime.query({ selector: { room: 'studio', path } })).documents[0],
     path,
   );
 }
@@ -378,10 +369,20 @@ test('ignores reversed deferred History list responses after navigation', async 
   await start(page, [studio], { history: true });
   await deferHistory(page);
   await mount(page, 'people/ada.md');
-  await page.getByText('History', { exact: true }).press('Enter');
-  await page.getByRole('button', { name: 'work/alpha.md', exact: true }).press('Enter');
+  await page.getByText('History', { exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.viewFixture.pendingHistory.map((entry) => entry.request.path)),
+    )
+    .toContain('people/ada.md');
+  await page.getByRole('button', { name: 'work/alpha.md', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Alpha');
-  await page.getByText('History', { exact: true }).press('Enter');
+  await page.getByText('History', { exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.viewFixture.pendingHistory.map((entry) => entry.request.path)),
+    )
+    .toContain('work/alpha.md');
   await answerHistory(
     page,
     { path: 'work/alpha.md', revision: undefined },
@@ -494,15 +495,15 @@ test('retries History after a temporary transport-uncertainty', async ({ page })
     });
   });
   await mount(page, 'work/alpha.md');
-  await page.getByText('History', { exact: true }).press('Enter');
+  await page.getByText('History', { exact: true }).click();
   await expect(page.getByText('transport-uncertainty', { exact: true })).toBeVisible();
   await expect(page.getByText('No history', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /lin/ })).toHaveCount(0);
-  await page.getByText('History', { exact: true }).press('Enter');
+  await page.getByText('History', { exact: true }).click();
   await page.evaluate(() => {
     window.viewFixture.historyFails = false;
   });
-  await page.getByText('History', { exact: true }).press('Enter');
+  await page.getByText('History', { exact: true }).click();
   await expect(page.getByRole('button', { name: /lin/ })).toBeVisible();
   await expect(page.getByText('transport-uncertainty', { exact: true })).toHaveCount(0);
 });

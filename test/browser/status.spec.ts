@@ -1,13 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { MdRuntime, SyncStatus } from '@agentshouse/mdruntime';
+import type { SyncStatus } from '@agentshouse/mdruntime';
+import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import type { MemoryAdapter } from '@agentshouse/mdruntime/memory';
 
-type StatusElement = HTMLElement & { bind: (runtime: MdRuntime) => void };
+type StatusElement = HTMLElement & { bind: (runtime: MdRuntimeClient) => void };
 
 declare global {
   interface Window {
     statusFixture: {
-      runtime: MdRuntime;
+      runtime: MdRuntimeClient;
       adapter: MemoryAdapter;
       seen: SyncStatus[];
       note: string;
@@ -35,33 +36,29 @@ const writable = {
 async function start(page: Page) {
   await page.goto('/');
   await page.evaluate(async (room) => {
-    const { createMdRuntime } = await import('@agentshouse/mdruntime');
     const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
     const helper = '/src/testing.js';
-    const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
-    const controller = new AbortController();
+    const { fixtureRoom, openTestRuntime, waitForRooms } = await import(helper);
     const adapter = createMemoryAdapter({ rooms: [fixtureRoom(room)] });
-    const runtime = createMdRuntime(
-      runtimeOptions({
-        adapter,
-        requiredGuarantees: [],
-        signal: controller.signal,
-        discoveryIntervalMs: 250,
-      }),
-    );
+    const opened = await openTestRuntime(adapter, {
+      requiredGuarantees: [],
+      discoveryIntervalMs: 250,
+    });
     const seen: SyncStatus[] = [];
-    runtime.observe('sync-status', (status) => seen.push(structuredClone(status)));
+    await opened.runtime.observe('sync-status', (status: SyncStatus) =>
+      seen.push(structuredClone(status)),
+    );
     window.statusFixture = {
-      runtime,
+      runtime: opened.runtime,
       adapter,
       seen,
       note: room.documents['notes/one.md'],
-      stop: () => controller.abort(),
+      stop: opened.stop,
     };
     const indicator = document.createElement('md-sync-status') as StatusElement;
-    indicator.bind(runtime);
+    indicator.bind(opened.runtime);
     document.body.replaceChildren(indicator);
-    await waitForRooms(runtime, (visible: ReturnType<typeof runtime.rooms>) =>
+    await waitForRooms(opened.runtime, (visible: readonly { roomVersion: string | null }[]) =>
       visible.some((entry) => entry.roomVersion !== null),
     );
   }, writable);
@@ -94,9 +91,9 @@ test('shows Pending from Observe after a local Save', async ({ page }) => {
     if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
   });
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Pending');
-  expect(await page.evaluate(() => window.statusFixture.runtime.syncStatus().state)).toBe(
-    'pending',
-  );
+  expect(
+    await page.evaluate(async () => (await window.statusFixture.runtime.syncStatus()).state),
+  ).toBe('pending');
 });
 
 test('shows attention from Observe when a head Change Batch is Conflicted', async ({ page }) => {
@@ -107,19 +104,50 @@ test('shows attention from Observe when a head Change Batch is Conflicted', asyn
       kind: 'conflicted',
       roomVersion: 'v2',
       affected: { 'notes/one.md': window.statusFixture.note },
-      text: 'title was changed on the Provider',
+      code: 'title_conflict',
+      fields: { detail: 'title was changed on the Provider' },
     });
     const result = await window.statusFixture.runtime.save('studio', [
       { kind: 'field', path: 'notes/one.md', name: 'title', value: 'Next' },
     ]);
     if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
   });
+  await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('title_conflict');
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText(
-    'Attention required',
+    'title was changed on the Provider',
   );
   expect(
-    await page.evaluate(() => window.statusFixture.runtime.syncStatus().attentionRequired),
-  ).toBe(true);
+    await page.evaluate(
+      async () => (await window.statusFixture.runtime.syncStatus()).attentionRequired,
+    ),
+  ).toMatchObject([
+    {
+      locator: 'studio',
+      outcome: 'conflicted',
+      refusal: { code: 'title_conflict', fields: { detail: 'title was changed on the Provider' } },
+    },
+  ]);
+});
+
+test('shows Pending with the Provider reset for a retryable refusal', async ({ page }) => {
+  await start(page);
+  await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Synced');
+  await page.evaluate(async () => {
+    window.statusFixture.adapter.script('mutate', {
+      kind: 'retryable-refusal',
+      code: 'rate_limited',
+      fields: { retry_at: '2099-01-01T00:00:00.000Z' },
+      reset: '2099-01-01T00:00:00.000Z',
+    });
+    const result = await window.statusFixture.runtime.save('studio', [
+      { kind: 'field', path: 'notes/one.md', name: 'title', value: 'Next' },
+    ]);
+    if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
+  });
+  await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Pending');
+  await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText(
+    '2099-01-01T00:00:00.000Z',
+  );
 });
 
 test('keeps changes Pending while the Provider is unreachable', async ({ page }) => {

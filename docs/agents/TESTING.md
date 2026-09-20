@@ -38,9 +38,11 @@ graph into browser ES modules in memory, including the locked micromark
 utility roots used by the renderer's syntax extensions;
 the import map resolves those entries. Playwright loads the App source
 directly with no compiled-file dependency. The browser fixture uses
-`@agentshouse/mdruntime/memory`; component specs from `components/01` onward
-use that same public in-memory Adapter. It belongs only to tests and is
-excluded from the eventual bundle by PRD-0005 in `agentshouse/mdruntime`.
+`@agentshouse/mdruntime/host` serving `@agentshouse/mdruntime/memory` and
+connects `@agentshouse/mdruntime/client` over a message port; component specs
+from `components/01` onward use that same public in-memory Adapter in the test
+placement. It belongs only to tests and is excluded from the eventual bundle
+by PRD-0005 in `agentshouse/mdruntime`.
 
 The static lane runs dependency-cruiser over `src/` and a specification that
 plants runtime and type-only Provider-specific imports outside the Adapter
