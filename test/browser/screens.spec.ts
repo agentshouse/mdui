@@ -63,11 +63,12 @@ async function start(
     async ({ rooms, options }) => {
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const helper = '/src/testing.js';
-      const { fixtureRoom, openTestRuntime, waitForRooms } = await import(helper);
+      const { fixtureRoom, openTestBridge, openTestRuntime, waitForRooms } = await import(helper);
       const specifier = '/src/app.js';
       const { bindApp } = (await import(specifier)) as {
         bindApp: (
           runtime: import('@agentshouse/mdruntime/client').MdRuntimeClient,
+          bridge: import('@agentshouse/app-bridge').HouseBridge,
         ) => Promise<() => void>;
       };
       const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) as never });
@@ -75,7 +76,7 @@ async function start(
         requiredGuarantees: options.requiredGuarantees ?? [],
         discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
       });
-      const unbind = await bindApp(opened.runtime);
+      const unbind = await bindApp(opened.runtime, openTestBridge().bridge);
       window.screensFixture = {
         runtime: opened.runtime,
         adapter,
@@ -343,11 +344,12 @@ test('Storage shows the Runtime storage-loss statement after durable state is ev
       );
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const helper = '/src/testing.js';
-      const { fixtureRoom, openTestRuntime, waitForRooms } = await import(helper);
+      const { fixtureRoom, openTestBridge, openTestRuntime, waitForRooms } = await import(helper);
       const specifier = '/src/app.js';
       const { bindApp } = (await import(specifier)) as {
         bindApp: (
           runtime: import('@agentshouse/mdruntime/client').MdRuntimeClient,
+          bridge: import('@agentshouse/app-bridge').HouseBridge,
         ) => Promise<() => void>;
       };
       const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) as never });
@@ -355,7 +357,7 @@ test('Storage shows the Runtime storage-loss statement after durable state is ev
         requiredGuarantees: [],
         shell: window.screensFixture.shell,
       });
-      const unbind = await bindApp(opened.runtime);
+      const unbind = await bindApp(opened.runtime, openTestBridge().bridge);
       window.screensFixture = {
         runtime: opened.runtime,
         adapter,
@@ -500,10 +502,13 @@ test('Refusal shows the client/host protocol mismatch as a Connection Refusal', 
   await page.goto('/');
   await page.evaluate(async () => {
     const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
+    const helper = '/src/testing.js';
+    const { openTestBridge } = await import(helper);
     const specifier = '/src/app.js';
     const { bindApp } = (await import(specifier)) as {
       bindApp: (
         runtime: import('@agentshouse/mdruntime/client').MdRuntimeClient,
+        bridge: import('@agentshouse/app-bridge').HouseBridge,
       ) => Promise<() => void>;
     };
     const channel = new MessageChannel();
@@ -511,7 +516,7 @@ test('Refusal shows the client/host protocol mismatch as a Connection Refusal', 
       channel.port1.postMessage({ mdRuntime: 0, message: { kind: 'result', id: 0, value: null } });
     });
     channel.port1.start();
-    await bindApp(connectMdRuntime(channel.port2));
+    await bindApp(connectMdRuntime(channel.port2), openTestBridge().bridge);
   });
   await expect(page.getByRole('status', { name: 'Connection Refusal' })).toContainText(
     'client-host-protocol-mismatch',

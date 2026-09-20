@@ -1,3 +1,8 @@
+import { connectHouseBridge, type HouseBridge } from '@agentshouse/app-bridge';
+import {
+  createHouseBridgeTestHost,
+  type HouseBridgeTestHost,
+} from '@agentshouse/app-bridge/test-host';
 import { parse, validate } from '@agentshouse/mdmodel';
 import { query } from '@agentshouse/query';
 import type {
@@ -124,6 +129,14 @@ export function runtimeOptions(
   options: Omit<MdRuntimeOptions, 'modelBinding' | 'queryBinding'>,
 ): MdRuntimeOptions {
   return { ...options, modelBinding: fixtureBinding, queryBinding: fixtureQuery };
+}
+
+export function openTestBridge(address = '/'): {
+  host: HouseBridgeTestHost;
+  bridge: HouseBridge;
+} {
+  const host = createHouseBridgeTestHost({ address });
+  return { host, bridge: connectHouseBridge(host.port) };
 }
 
 export async function waitForRooms(

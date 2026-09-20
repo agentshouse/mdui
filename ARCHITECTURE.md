@@ -225,10 +225,13 @@ browser light and dark defaults. Browser acceptance is owned by
 ## Screens
 
 `src/index.html` holds the seven screens as plain HTML. `connectApp()` obtains
-the Runtime port from the bridge client and calls `bindApp`. `bindApp(runtime)`
+the Runtime port from the bridge client and calls `bindApp`. `bindApp(runtime, bridge)`
 clones that template, binds the Sync Status indicator, and fills each screen
-from the public remote client only. Presentation State is which screen is
-shown and which file Document View is bound to.
+from the public remote client only. The part of the shell address below the App's
+path names a screen and, for File, a Room locator and Document path; main
+resolves it against the Runtime and asks the bridge client to push or replace
+it. Presentation State is which screen is shown and which file Document View is
+bound to, written through the client's presentation surface.
 
 ```js
 import { connectApp } from './index.js';

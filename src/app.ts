@@ -1,3 +1,4 @@
+import type { HouseBridge } from '@agentshouse/app-bridge';
 import type {
   AppRoom,
   ConnectionRefusal,
@@ -13,6 +14,82 @@ import './components/status.js';
 import './components/view.js';
 
 type Screen = 'rooms' | 'search' | 'file' | 'work' | 'refusal' | 'storage' | 'log';
+type Addressed = Exclude<Screen, 'refusal' | 'storage'>;
+
+const ADDRESSED: readonly Addressed[] = ['rooms', 'search', 'file', 'work', 'log'];
+
+function addressed(value: string): value is Addressed {
+  return (ADDRESSED as readonly string[]).includes(value);
+}
+
+function parseAddress(address: string): {
+  base: string;
+  screen: Addressed | null;
+  room: string | null;
+  path: string | null;
+} {
+  const url = new URL(address, 'https://house.invalid');
+  const segments = url.pathname.split('/').filter((part) => part.length > 0);
+  const index = segments.findIndex((part) => addressed(part));
+  if (index < 0) {
+    return {
+      base: segments.length === 0 ? '' : `/${segments.join('/')}`,
+      screen: null,
+      room: null,
+      path: null,
+    };
+  }
+  const screen = segments[index];
+  if (screen === undefined || !addressed(screen)) {
+    return {
+      base: segments.length === 0 ? '' : `/${segments.join('/')}`,
+      screen: null,
+      room: null,
+      path: null,
+    };
+  }
+  const base = index === 0 ? '' : `/${segments.slice(0, index).join('/')}`;
+  const after = segments.slice(index + 1);
+  if (screen !== 'file') {
+    return { base, screen, room: null, path: null };
+  }
+  return {
+    base,
+    screen,
+    room: after[0] ?? null,
+    path: after.length > 1 ? after.slice(1).join('/') : null,
+  };
+}
+
+function composeAddress(base: string, suffix: string): string {
+  if (suffix === '') return base === '' ? '/' : `${base}/`;
+  return `${base}/${suffix}`;
+}
+
+function parsePresentation(value: unknown): {
+  screen: Addressed;
+  room?: string;
+  path?: string;
+} | null {
+  if (value === null || typeof value !== 'object') return null;
+  if (!('screen' in value) || typeof value.screen !== 'string' || !addressed(value.screen)) {
+    return null;
+  }
+  const room = 'room' in value && typeof value.room === 'string' ? value.room : undefined;
+  const path = 'path' in value && typeof value.path === 'string' ? value.path : undefined;
+  return { screen: value.screen, room, path };
+}
+
+function currentAddress(bridge: HouseBridge): Promise<string> {
+  const held = bridge.address();
+  if (held !== null) return Promise.resolve(held);
+  return new Promise((resolve) => {
+    const stop = bridge.onAddress((address) => {
+      stop();
+      resolve(address);
+    });
+  });
+}
 
 type DocumentViewElement = HTMLElement & {
   bind: (runtime: MdRuntimeClient, room: string, path: string) => void;
@@ -152,7 +229,7 @@ function connectionRefusalText(refusal: ConnectionRefusal): string {
   return reasons[refusal.reason];
 }
 
-export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
+export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Promise<() => void> {
   unbind();
   const template = document.getElementById('md-app');
   if (!(template instanceof HTMLTemplateElement))
@@ -169,6 +246,7 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
   const status = app.querySelector('md-sync-status') as StatusElement;
   const view = app.querySelector('md-document-view') as DocumentViewElement;
   const roomsPart = app.querySelector('[data-part="rooms"]') as HTMLElement;
+  const unresolvedPart = app.querySelector('[data-part="unresolved"]') as HTMLElement;
   const resultsPart = app.querySelector('[data-part="results"]') as HTMLElement;
   const draftsPart = app.querySelector('[data-part="drafts"]') as HTMLElement;
   const draftsState = app.querySelector('[data-part="drafts-state"]') as HTMLElement;
@@ -191,6 +269,10 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
   let visibleRooms: readonly AppRoom[] = [];
   let closed = false;
   let searchRead = 0;
+  let openRoom: string | undefined;
+  let openPath: string | undefined;
+  let lastPresentation: string | undefined;
+  let heldRefusal: ConnectionRefusal | null = null;
 
   function cleanup(): void {
     closed = true;
@@ -204,7 +286,7 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
   }
   unbind = cleanup;
 
-  function show(screen: Screen): void {
+  function reveal(screen: Screen): void {
     current = screen;
     for (const section of app.querySelectorAll<HTMLElement>('section[data-screen]')) {
       section.hidden = section.dataset.screen !== screen;
@@ -223,8 +305,111 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
   }
 
   function openFile(room: string, path: string): void {
-    view.bind(runtime, room, path);
-    show('file');
+    if (openRoom !== room || openPath !== path || current !== 'file') {
+      openRoom = room;
+      openPath = path;
+      view.bind(runtime, room, path);
+    }
+    reveal('file');
+  }
+
+  async function documentHeld(locator: string, path: string): Promise<boolean> {
+    const rooms = visibleRooms.length > 0 ? visibleRooms : await runtime.rooms();
+    if (closed || !rooms.some((room) => room.locator === locator)) return false;
+    const result = await runtime.query({ selector: { room: locator } });
+    return !closed && result.documents.some((file) => file.path === path);
+  }
+
+  function nameUnresolved(address: string | null): void {
+    if (address === null || address === '') {
+      unresolvedPart.hidden = true;
+      unresolvedPart.textContent = '';
+      return;
+    }
+    unresolvedPart.hidden = false;
+    unresolvedPart.textContent = address;
+  }
+
+  async function writePresentation(): Promise<void> {
+    if (current === 'refusal' || current === 'storage' || !unresolvedPart.hidden) return;
+    const value =
+      current === 'file' && openRoom !== undefined && openPath !== undefined
+        ? { screen: current, room: openRoom, path: openPath }
+        : { screen: current };
+    const snapshot = JSON.stringify(value);
+    if (snapshot === lastPresentation) return;
+    lastPresentation = snapshot;
+    try {
+      await runtime.presentation.write(value);
+    } catch {
+      lastPresentation = undefined;
+    }
+  }
+
+  async function applyAddress(address: string): Promise<void> {
+    if (heldRefusal !== null) return;
+    const parsed = parseAddress(address);
+    if (parsed.screen === 'file' && parsed.room !== null && parsed.path !== null) {
+      if (await documentHeld(parsed.room, parsed.path)) {
+        if (closed || heldRefusal !== null) return;
+        nameUnresolved(null);
+        openFile(parsed.room, parsed.path);
+        await writePresentation();
+        return;
+      }
+    }
+    if (closed || heldRefusal !== null) return;
+    if (parsed.screen === 'file' && parsed.room === null && parsed.path === null) {
+      nameUnresolved(null);
+      reveal('file');
+      await writePresentation();
+      return;
+    }
+    if (parsed.screen === 'file' || parsed.screen === null) {
+      if (parsed.screen === 'file') nameUnresolved(address);
+      else nameUnresolved(null);
+      reveal('rooms');
+      if (parsed.screen === null) await writePresentation();
+      return;
+    }
+    nameUnresolved(null);
+    reveal(parsed.screen);
+    await writePresentation();
+  }
+
+  async function applyStart(address: string): Promise<void> {
+    if (closed || current === 'refusal') return;
+    const parsed = parseAddress(address);
+    if (parsed.screen !== null) {
+      await applyAddress(address);
+      return;
+    }
+    let stored = null;
+    try {
+      stored = parsePresentation(await runtime.presentation.read());
+    } catch {
+      stored = null;
+    }
+    if (closed) return;
+    if (stored?.screen === 'file' && stored.room !== undefined && stored.path !== undefined) {
+      await bridge.replace(composeAddress(parsed.base, `file/${stored.room}/${stored.path}`));
+      return;
+    }
+    if (stored !== null && stored.screen !== 'file' && stored.screen !== 'rooms') {
+      await bridge.replace(composeAddress(parsed.base, stored.screen));
+      return;
+    }
+    await applyAddress(address);
+  }
+
+  async function go(screen: Addressed, file?: { room: string; path: string }): Promise<void> {
+    const suffix =
+      screen === 'file' && file !== undefined
+        ? `file/${file.room}/${file.path}`
+        : screen === 'file' && openRoom !== undefined && openPath !== undefined
+          ? `file/${openRoom}/${openPath}`
+          : screen;
+    await bridge.push(composeAddress(parseAddress(bridge.address() ?? '/').base, suffix));
   }
 
   async function presentRooms(rooms: readonly AppRoom[]): Promise<void> {
@@ -264,7 +449,9 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
         typesHeading,
         types,
         filesHeading,
-        renderTree(fileTree(paths), true, (path) => openFile(room.locator, path)),
+        renderTree(fileTree(paths), true, (path) => {
+          void go('file', { room: room.locator, path });
+        }),
       );
       roomsPart.append(article);
     }
@@ -288,6 +475,18 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
     }
     fillSelect(typeSelect, 'All MD Types', [...types.keys()].sort());
     fillSelect(fieldSelect, 'Any field', [...fields].sort());
+    if (heldRefusal !== null) return;
+    const address = bridge.address();
+    if (address === null) return;
+    const parsed = parseAddress(address);
+    if (
+      parsed.screen === 'file' &&
+      parsed.room !== null &&
+      parsed.path !== null &&
+      (openRoom !== parsed.room || openPath !== parsed.path || current !== 'file')
+    ) {
+      await applyAddress(address);
+    }
   }
 
   function presentDrafts(drafts: readonly DraftEntry[]): void {
@@ -366,6 +565,7 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
   }
 
   function presentRefusal(refusal: ConnectionRefusal | null): void {
+    heldRefusal = refusal;
     if (refusal === null) {
       refusalPart.textContent = 'No Connection Refusal';
       reauthorize.hidden = true;
@@ -373,7 +573,7 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
     }
     refusalPart.textContent = connectionRefusalText(refusal);
     reauthorize.hidden = !refusal.reauthorizationOffered;
-    show('refusal');
+    reveal('refusal');
   }
 
   async function presentStorage(statement: string | null): Promise<void> {
@@ -394,7 +594,11 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
     if (!(button instanceof HTMLButtonElement)) return;
     const screen = button.dataset.screen;
     if (screen === undefined) return;
-    show(screen as Screen);
+    if (screen === 'refusal' || screen === 'storage') {
+      reveal(screen);
+      return;
+    }
+    if (addressed(screen)) void go(screen);
   });
   form.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -413,7 +617,9 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
         const button = document.createElement('button');
         button.type = 'button';
         button.textContent = `${file.room} ${file.path}`;
-        button.addEventListener('click', () => openFile(file.room, file.path));
+        button.addEventListener('click', () => {
+          void go('file', { room: file.room, path: file.path });
+        });
         item.append(button);
         resultsPart.append(item);
       }
@@ -437,7 +643,7 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
   });
   app.addEventListener('open-path', (event) => {
     const detail = (event as CustomEvent<{ room: string; path: string }>).detail;
-    openFile(detail.room, detail.path);
+    void go('file', { room: detail.room, path: detail.path });
   });
 
   async function hold(start: Promise<() => void>): Promise<void> {
@@ -476,6 +682,14 @@ export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
       }),
     ),
   ]);
+
+  stops.push(
+    bridge.onAddress((next) => {
+      void applyAddress(next);
+    }),
+  );
+  const address = await currentAddress(bridge);
+  if (!closed) await applyStart(address);
 
   return cleanup;
 }

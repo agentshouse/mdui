@@ -133,6 +133,12 @@ Work's public Draft inventory and per-Room queues with Provider text,
 Connection Refusal with re-authorization, the storage-loss statement, and
 synchronization log export, plus keyboard operation of labelled screen
 controls, 360px and desktop layout, and light and dark themes.
+The address and Presentation State seam runs over the client entry against the
+host entry serving the in-memory Adapter, with `@agentshouse/app-bridge/test-host`
+playing the shell: a delivered address opens File or names an unresolved
+address on Rooms, user moves push and Back/Forward land, Presentation State is
+observed on a second port of the same App, a reload without an address below
+the App's path restores it, and a delivered address wins.
 The Work specification exercises absent-Path creations, unchanged-Path content
 changes, remote removal and Room access loss, navigation and literal reload,
 same-tab and cross-tab Draft and queue convergence, Save consumption, and
