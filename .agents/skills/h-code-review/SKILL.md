@@ -59,11 +59,16 @@ After every reviewer of the current round has launched, park when
 `AGENT_RUN_JOB_ID` is set:
 
 ```sh
-agent-run park --compact <<'PRESERVE'
-Code review is in flight. When resumed, collect the findings and continue the
-review sequence from the recorded candidate and round.
-PRESERVE
+agent-run park --compact
 ```
+
+Every round parks, the last residual and a defect-only round included: what
+comes back is findings to fix, and the reading that produced the candidate is
+not what fixing them needs. Park takes no instructions and refuses a piped
+brief; the compaction instruction is fixed by the launcher. The resumed session
+recovers the sequence from its recorded round, never from a note it wrote
+itself. A turn that ends while its reviewers run is parked whether or not it
+asked, so a skipped park loses neither the compaction nor the reviewers.
 
 Print the job IDs and end the turn. Collect those jobs only after resume. When
 `AGENT_RUN_JOB_ID` is unset, collect them in this session.
