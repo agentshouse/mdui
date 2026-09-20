@@ -22,6 +22,7 @@ declare global {
       stop: () => void;
       unbind: () => void;
       seen: unknown[];
+      openAt?: number;
     };
   }
 }
@@ -167,10 +168,10 @@ test('opening a file and moving between screens push, and a delivered address la
 async function remount(
   page: Page,
   address: string,
-  faults: { read?: string; write?: string } = {},
+  options: { read?: string; write?: string; duringRead?: string } = {},
 ) {
   await page.evaluate(
-    async ({ address, faults }) => {
+    async ({ address, options }) => {
       const { adapter, runtimeHost, shell, stop, unbind } = window.addressFixture;
       if (runtimeHost === undefined) throw new Error('The Runtime host is missing.');
       unbind();
@@ -184,31 +185,54 @@ async function remount(
       const channel = new MessageChannel();
       const detach = runtimeHost.attach(channel.port1, 'mdui');
       const connected = connectMdRuntime(channel.port2);
-      const runtime =
-        faults.read === undefined && faults.write === undefined
-          ? connected
-          : new Proxy(connected, {
-              get(target, prop, receiver) {
-                if (prop === 'presentation') {
-                  return {
-                    async read() {
-                      if (faults.read !== undefined) throw new Error(faults.read);
-                      return target.presentation.read();
-                    },
-                    write(value: unknown) {
-                      if (faults.write !== undefined) {
-                        return Promise.reject(new Error(faults.write));
-                      }
-                      return target.presentation.write(value);
-                    },
-                  };
-                }
-                const value = Reflect.get(target, prop, receiver);
-                return typeof value === 'function' ? value.bind(target) : value;
-              },
-            });
+      const proxy =
+        options.read !== undefined ||
+        options.write !== undefined ||
+        options.duringRead !== undefined;
+      let readStarted = false;
+      const runtime = proxy
+        ? new Proxy(connected, {
+            get(target, prop, receiver) {
+              if (prop === 'presentation') {
+                return {
+                  async read() {
+                    if (options.read !== undefined) throw new Error(options.read);
+                    const value = await target.presentation.read();
+                    if (options.duringRead !== undefined) {
+                      readStarted = true;
+                      await new Promise<void>((resolve) => {
+                        window.releasePresentationRead = resolve;
+                      });
+                    }
+                    return value;
+                  },
+                  write(value: unknown) {
+                    if (options.write !== undefined) {
+                      return Promise.reject(new Error(options.write));
+                    }
+                    return target.presentation.write(value);
+                  },
+                };
+              }
+              const value = Reflect.get(target, prop, receiver);
+              return typeof value === 'function' ? value.bind(target) : value;
+            },
+          })
+        : connected;
       const { host, bridge } = openTestBridge(address);
-      const next = await bindApp(runtime, bridge);
+      const bound = bindApp(runtime, bridge);
+      let openAt = 0;
+      if (options.duringRead !== undefined) {
+        const started = Date.now();
+        while (!readStarted) {
+          if (Date.now() - started > 5000) throw new Error('presentation.read did not start');
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        openAt = host.navigations.length;
+        host.open(options.duringRead);
+        window.releasePresentationRead?.();
+      }
+      const next = await bound;
       window.addressFixture = {
         runtime,
         runtimeHost,
@@ -223,6 +247,7 @@ async function remount(
         },
         unbind: next,
         seen: [],
+        openAt,
       };
       await waitForRooms(
         connected,
@@ -230,7 +255,7 @@ async function remount(
           visible.length === 1 && visible.every((room) => room.roomVersion !== null),
       );
     },
-    { address, faults },
+    { address, options },
   );
 }
 
@@ -356,85 +381,20 @@ test('a restore does not clobber an address delivered while presentation is stil
     .getByRole('button', { name: 'notes/hello.md' })
     .click();
   await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
-  await page.evaluate(async () => {
-    const { adapter, runtimeHost, shell, stop, unbind } = window.addressFixture;
-    if (runtimeHost === undefined) throw new Error('The Runtime host is missing.');
-    unbind();
-    const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
-    const helper = '/src/testing.js';
-    const { openTestBridge, waitForRooms } = await import(helper);
-    const specifier = '/src/app.js';
-    const { bindApp } = (await import(specifier)) as {
-      bindApp: (runtime: MdRuntimeClient, bridge: HouseBridge) => Promise<() => void>;
-    };
-    const channel = new MessageChannel();
-    const detach = runtimeHost.attach(channel.port1, 'mdui');
-    const connected = connectMdRuntime(channel.port2);
-    let readStarted = false;
-    const runtime = new Proxy(connected, {
-      get(target, prop, receiver) {
-        if (prop === 'presentation') {
-          return {
-            async read() {
-              const value = await target.presentation.read();
-              readStarted = true;
-              await new Promise<void>((resolve) => {
-                window.releasePresentationRead = resolve;
-              });
-              return value;
-            },
-            write(value: unknown) {
-              return target.presentation.write(value);
-            },
-          };
-        }
-        const value = Reflect.get(target, prop, receiver);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
-    const { host, bridge } = openTestBridge('/');
-    const bound = bindApp(runtime, bridge);
-    const started = Date.now();
-    while (!readStarted) {
-      if (Date.now() - started > 5000) throw new Error('presentation.read did not start');
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    const prior = host.navigations.length;
-    host.open('/file/studio/notes/other.md');
-    window.releasePresentationRead?.();
-    const next = await bound;
-    if (
-      host.navigations.slice(prior).some((entry: { mode: string; address: string }) => {
-        return entry.mode === 'replace' && entry.address === '/file/studio/notes/hello.md';
-      })
-    ) {
-      throw new Error('restore replaced the delivered address');
-    }
-    window.addressFixture = {
-      runtime,
-      runtimeHost,
-      adapter,
-      host,
-      bridge,
-      shell,
-      stop: () => {
-        next();
-        detach();
-        stop();
-      },
-      unbind: next,
-      seen: [],
-    };
-    await waitForRooms(
-      connected,
-      (visible: readonly { roomVersion: string | null }[]) =>
-        visible.length === 1 && visible.every((room) => room.roomVersion !== null),
-    );
-  });
+  await remount(page, '/', { duringRead: '/file/studio/notes/other.md' });
   await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Other');
-  expect(await page.evaluate(() => window.addressFixture.host.address())).toBe(
-    '/file/studio/notes/other.md',
-  );
+  expect(
+    await page.evaluate(() => {
+      const openAt = window.addressFixture.openAt;
+      if (openAt === undefined) throw new Error('remount did not record the delivery');
+      return {
+        address: window.addressFixture.host.address(),
+        replaced: window.addressFixture.host.navigations.slice(openAt).some((entry) => {
+          return entry.mode === 'replace' && entry.address === '/file/studio/notes/hello.md';
+        }),
+      };
+    }),
+  ).toEqual({ address: '/file/studio/notes/other.md', replaced: false });
 });
 
 test('a remainder that names the Work screen opens Work', async ({ page }) => {
@@ -445,11 +405,78 @@ test('a remainder that names the Work screen opens Work', async ({ page }) => {
 test('a path that is not a remainder below the App path does not open File or Work', async ({
   page,
 }) => {
-  await start(page, { address: '/apps/work/file/studio/notes/hello.md' });
+  await start(page, { address: '/file/studio/notes/hello.md' });
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await remount(page, '/apps/work/file/studio/notes/hello.md');
   await expect(page.getByRole('heading', { level: 1, name: 'Rooms' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeHidden();
   await expect(page.getByRole('heading', { level: 1, name: 'Work' })).toBeHidden();
+  await expect(page.getByRole('status', { name: 'Unresolved address' })).toHaveText(
+    '/apps/work/file/studio/notes/hello.md',
+  );
+  expect(
+    await page.evaluate(() => ({
+      address: window.addressFixture.host.address(),
+      navigations: window.addressFixture.host.navigations.map((entry) => ({
+        mode: entry.mode,
+        address: entry.address,
+      })),
+    })),
+  ).toEqual({ address: '/apps/work/file/studio/notes/hello.md', navigations: [] });
+});
+
+test('a malformed percent escape in a File remainder is named on Rooms', async ({ page }) => {
+  await start(page, {
+    address: '/file/studio/notes/hello.md',
+    rooms: [
+      {
+        ...studio,
+        documents: {
+          ...studio.documents,
+          'notes/hello%2.md':
+            '---\ntype: note\ntitle: Literal percent\n---\n## Body\nliteral unique phrase\n',
+        },
+      },
+    ],
+  });
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await remount(page, '/file/studio/notes/hello%2.md');
+  await expect(page.getByRole('heading', { level: 1, name: 'Rooms' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Unresolved address' })).toHaveText(
+    '/file/studio/notes/hello%2.md',
+  );
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeHidden();
   await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveCount(0);
+  expect(
+    await page.evaluate(() => ({
+      address: window.addressFixture.host.address(),
+      navigations: window.addressFixture.host.navigations.map((entry) => ({
+        mode: entry.mode,
+        address: entry.address,
+      })),
+    })),
+  ).toEqual({ address: '/file/studio/notes/hello%2.md', navigations: [] });
+});
+
+test('an unrecognized remainder does not yield to a conflicting stored presentation', async ({
+  page,
+}) => {
+  await start(page, { address: '/file/studio/notes/hello.md' });
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await remount(page, '/notes');
+  await expect(page.getByRole('heading', { level: 1, name: 'Rooms' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Unresolved address' })).toHaveText('/notes');
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeHidden();
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveCount(0);
+  expect(
+    await page.evaluate(() => ({
+      address: window.addressFixture.host.address(),
+      navigations: window.addressFixture.host.navigations.map((entry) => ({
+        mode: entry.mode,
+        address: entry.address,
+      })),
+    })),
+  ).toEqual({ address: '/notes', navigations: [] });
 });
 
 test('Document paths with a space or a hash round-trip through the address', async ({ page }) => {

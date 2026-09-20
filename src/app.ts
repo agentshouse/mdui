@@ -22,14 +22,6 @@ function addressed(value: string): value is Addressed {
   return (ADDRESSED as readonly string[]).includes(value);
 }
 
-function decodeSegment(part: string): string {
-  try {
-    return decodeURIComponent(part);
-  } catch {
-    return part;
-  }
-}
-
 function encodeSegments(value: string): string {
   return value.split('/').map(encodeURIComponent).join('/');
 }
@@ -44,26 +36,35 @@ function parseAddress(address: string): {
   path: string | null;
   search: string;
   hash: string;
+  remainder: boolean;
 } {
   const url = new URL(address, 'https://house.invalid');
   const segments = url.pathname.split('/').filter((part) => part.length > 0);
   const search = url.search;
   const hash = url.hash;
+  const remainder = segments.length > 0;
   const head = segments[0];
   if (head === 'file') {
-    const after = segments.slice(1).map(decodeSegment);
+    let after: string[];
+    try {
+      after = segments.slice(1).map(decodeURIComponent);
+    } catch (error) {
+      if (!(error instanceof URIError)) throw error;
+      return { screen: null, room: null, path: null, search, hash, remainder };
+    }
     return {
       screen: 'file',
       room: after[0] ?? null,
       path: after.length > 1 ? after.slice(1).join('/') : null,
       search,
       hash,
+      remainder,
     };
   }
   if (head !== undefined && addressed(head) && segments.length === 1) {
-    return { screen: head, room: null, path: null, search, hash };
+    return { screen: head, room: null, path: null, search, hash, remainder };
   }
-  return { screen: null, room: null, path: null, search, hash };
+  return { screen: null, room: null, path: null, search, hash, remainder };
 }
 
 function composeAddress(suffix: string, extras: { search?: string; hash?: string } = {}): string {
@@ -330,7 +331,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   }
 
   function nameUnresolved(address: string | null): void {
-    if (address === null || address === '') {
+    if (address === null) {
       unresolvedPart.hidden = true;
       unresolvedPart.textContent = '';
       return;
@@ -390,10 +391,10 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
       return;
     }
     if (parsed.screen === 'file' || parsed.screen === null) {
-      if (parsed.screen === 'file') nameUnresolved(address);
+      if (parsed.screen === 'file' || parsed.remainder) nameUnresolved(address);
       else nameUnresolved(null);
       reveal('rooms');
-      if (parsed.screen === null) await writePresentation();
+      if (parsed.screen === null && !parsed.remainder) await writePresentation();
       return;
     }
     nameUnresolved(null);
@@ -426,14 +427,14 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
       return;
     }
     if (closed || freezeAddress() || token !== generation) return;
-    if (parseAddress(bridge.address() ?? '/').screen !== null) return;
+    if (parseAddress(bridge.address() ?? '/').remainder) return;
     await bridge.replace(composeAddress(presentationSuffix(stored)));
   }
 
   async function applyStart(address: string): Promise<void> {
     if (closed || freezeAddress()) return;
     const parsed = parseAddress(address);
-    if (parsed.screen !== null) {
+    if (parsed.remainder) {
       await applyAddress(address);
       return;
     }
@@ -459,7 +460,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
     const token = generation;
     if (closed || freezeAddress() || current === 'refusal' || current === 'storage') return;
     const parsed = parseAddress(bridge.address() ?? '/');
-    if (parsed.screen !== null) return;
+    if (parsed.remainder) return;
     const stored = parsePresentation(value);
     if (stored === null) return;
     await restorePresentation(stored, token);

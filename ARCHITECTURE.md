@@ -232,6 +232,11 @@ below the App's path. That remainder names a screen and, for File, a Room locato
 and Document path; main resolves it against the Runtime and asks the bridge
 client to push or replace it. A re-push of the same File document keeps the
 query and fragment; a move to a different document or another screen drops them.
+An unrecognized remainder, including a malformed percent escape, is named on Rooms
+and does not yield to Presentation State; only a start with no remainder reads the
+store back. A remainder the shell refuses, including one over 1000 characters, is
+not retried: `go` does not surface `HouseNavigationRefused`, and the App stays on
+the screen it already shows.
 Presentation State is which screen is shown and which file Document View is
 bound to, written through the client's presentation surface and observed so a
 tab with no address below the App path follows it. A failed presentation read
