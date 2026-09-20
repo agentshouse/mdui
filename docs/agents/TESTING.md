@@ -133,6 +133,17 @@ Work's public Draft inventory and per-Room queues with Provider text,
 Connection Refusal with re-authorization, the storage-loss statement, and
 synchronization log export, plus keyboard operation of labelled screen
 controls, 360px and desktop layout, and light and dark themes.
+The address and Presentation State seam runs over the client entry against the
+host entry serving the in-memory Adapter, with `@agentshouse/app-bridge/test-host`
+playing the shell: a delivered address opens File or names an unresolved
+address on Rooms, user moves push and Back/Forward land, Presentation State is
+observed on a second port of the same App, a reload without an address below
+the App's path restores it, and a delivered address wins over Presentation
+State even when restore is still reading. A later delivery wins over an earlier
+File resolution still in flight. Paths encode for a space or `#`. A second tab
+with no address below the App path follows Presentation State. Re-applying the
+current address does not hide Storage or a live Connection Refusal. The open
+file remains in Presentation State when the screen is not File.
 The Work specification exercises absent-Path creations, unchanged-Path content
 changes, remote removal and Room access loss, navigation and literal reload,
 same-tab and cross-tab Draft and queue convergence, Save consumption, and
@@ -146,7 +157,13 @@ being typed into; the field keeps its value and focus until the user commits it.
 The renderer seam also
 accepts adversarial text directly through its public property, independently
 of Model collection validity; normal section input is read through Query.
-The pure lane qualifies the renderer dependencies against the
+The pure lane owns `test/pure/address.spec.ts` and the renderer corpus.
+`test/pure/address.spec.ts` asserts `splitAddress` and `parseAddress` on the
+remainder grammar, including production-delivered `//` and `scheme:` forms,
+`/\notes` whose `\` the browser would already have folded to `/`, empty or `/`
+as no remainder, File versus addressed screen versus unroutable remainder, and
+decode of a space or `#`. The renderer corpus qualifies the renderer dependencies
+against the
 [original GFM 0.29 corpus](../../test/fixtures/README.md), preserving the source's
 base/extension distinction. It is not browser safety evidence, and its current
 configuration applies the historical inline-comment rule to both fixture modes

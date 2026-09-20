@@ -41,10 +41,13 @@ async function mount(
     async ({ rooms, options }) => {
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const helper = '/src/testing.js';
-      const { fixtureRoom, openTestRuntime, waitForRooms } = await import(helper);
+      const { fixtureRoom, openTestBridge, openTestRuntime, waitForRooms } = await import(helper);
       const specifier = '/src/app.js';
       const { bindApp } = (await import(specifier)) as {
-        bindApp: (runtime: MdRuntimeClient) => Promise<() => void>;
+        bindApp: (
+          runtime: MdRuntimeClient,
+          bridge: import('@agentshouse/app-bridge').HouseBridge,
+        ) => Promise<() => void>;
       };
       const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) });
       if (options.pending) adapter.script('mutate', { kind: 'transport-uncertainty' });
@@ -53,7 +56,7 @@ async function mount(
         discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
       });
       const runtime = opened.runtime;
-      const unbind = await bindApp(runtime);
+      const unbind = await bindApp(runtime, openTestBridge().bridge);
       const stops: Array<() => void> = [];
       window.workFixture = {
         runtime,
@@ -116,12 +119,17 @@ async function attachTab(page: Page, other: Page): Promise<void> {
   await other.evaluate(async () => {
     const port = await window.workRuntimePort!;
     const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
+    const helper = '/src/testing.js';
+    const { openTestBridge } = await import(helper);
     const specifier = '/src/app.js';
     const { bindApp } = (await import(specifier)) as {
-      bindApp: (runtime: MdRuntimeClient) => Promise<() => void>;
+      bindApp: (
+        runtime: MdRuntimeClient,
+        bridge: import('@agentshouse/app-bridge').HouseBridge,
+      ) => Promise<() => void>;
     };
     const runtime = connectMdRuntime(port);
-    const unbind = await bindApp(runtime);
+    const unbind = await bindApp(runtime, openTestBridge().bridge);
     const stops: Array<() => void> = [];
     window.workFixture = {
       runtime,
@@ -296,9 +304,11 @@ test('Work reports a failed durable read without false empty or storage loss and
   await expect(inventory(page)).toHaveText(['alpha notes/new.md']);
   await page.evaluate(async () => {
     window.workFaults.read = true;
+    const helper = '/src/testing.js';
+    const { openTestBridge } = await import(helper);
     const specifier = '/src/app.js';
     const { bindApp } = await import(specifier);
-    await bindApp(window.workFixture.runtime);
+    await bindApp(window.workFixture.runtime, openTestBridge().bridge);
   });
   await screen(page, 'Work');
   await expect(state).toContainText('Injected durable read failure');

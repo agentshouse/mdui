@@ -9,7 +9,7 @@ export { bindApp };
 
 export async function connectApp() {
   const bridge = connectHouseBridge();
-  return bindApp(connectMdRuntime(await bridge.runtime));
+  return bindApp(connectMdRuntime(await bridge.runtime), bridge);
 }
 
 void connectApp();

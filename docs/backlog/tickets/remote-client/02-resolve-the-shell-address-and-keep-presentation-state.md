@@ -1,6 +1,6 @@
 # 02-resolve-the-shell-address-and-keep-presentation-state - Resolve the shell's address to a Room and a Document and keep main's screen and open file as Presentation State
 
-Status: ready-for-agent
+Status: resolved
 
 ## Frame
 
@@ -43,10 +43,10 @@ playing the shell.
 
 ## Acceptance criteria
 
-- [ ] A delivered address naming a Room and a Document path opens the File screen on that Document over the client entry; one naming a Room or a Document the Runtime does not hold shows the Rooms screen with that address named; the query and fragment survive the round trip.
-- [ ] Opening a file and moving between screens push the address through the bridge client's in-page test host, and an address the test host delivers back, as Back and Forward would, lands on the screen and Document it names.
-- [ ] The screen and the open file written as Presentation State are observed on a second port of the same App, are read back after a reload without an address below the App's path, and yield to a delivered address.
-- [ ] Main composes no address outside its own path segment, opens no channel beside the bridge client and the Runtime port, and no `show(screen)` call remains that changes the screen without the address and Presentation State following.
+- [x] A delivered address naming a Room and a Document path opens the File screen on that Document over the client entry; one naming a Room or a Document the Runtime does not hold shows the Rooms screen with that address named; the query and fragment survive the round trip.
+- [x] Opening a file and moving between screens push the address through the bridge client's in-page test host, and an address the test host delivers back, as Back and Forward would, lands on the screen and Document it names.
+- [x] The screen and the open file written as Presentation State are observed on a second port of the same App, are read back after a reload without an address below the App's path, and yield to a delivered address.
+- [x] Main composes no address outside its own path segment, opens no channel beside the bridge client and the Runtime port, and no `show(screen)` call remains that changes the screen without the address and Presentation State following.
 
 ## Mines
 

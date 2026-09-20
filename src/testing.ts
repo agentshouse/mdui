@@ -1,3 +1,14 @@
+import {
+  connectHouseBridge,
+  type HouseBridge,
+  type HouseBridgeEvent,
+  type HouseMessagePort,
+} from '@agentshouse/app-bridge';
+import {
+  createHouseBridgeTestHost,
+  type HouseBridgeNavigation,
+  type HouseBridgeTestHost,
+} from '@agentshouse/app-bridge/test-host';
 import { parse, validate } from '@agentshouse/mdmodel';
 import { query } from '@agentshouse/query';
 import type {
@@ -124,6 +135,83 @@ export function runtimeOptions(
   options: Omit<MdRuntimeOptions, 'modelBinding' | 'queryBinding'>,
 ): MdRuntimeOptions {
   return { ...options, modelBinding: fixtureBinding, queryBinding: fixtureQuery };
+}
+
+export type TestBridgeHost = Pick<HouseBridgeTestHost, 'port' | 'navigations' | 'address' | 'open'>;
+
+export function openTestBridge(
+  address = '/',
+  options: { verbatim?: boolean } = {},
+): {
+  host: TestBridgeHost;
+  bridge: HouseBridge;
+} {
+  if (options.verbatim !== true) {
+    const host = createHouseBridgeTestHost({ address });
+    return { host, bridge: connectHouseBridge(host.port) };
+  }
+  return createCore2076DeliveryHost(address);
+}
+
+function createCore2076DeliveryHost(address: string): {
+  host: TestBridgeHost;
+  bridge: HouseBridge;
+} {
+  const navigations: HouseBridgeNavigation[] = [];
+  const listeners = new Set<(event: HouseBridgeEvent) => void>();
+  const queued: HouseBridgeEvent[] = [];
+  let started = false;
+  let current = address;
+  function deliver(data: unknown): void {
+    const event = { data, ports: [] as const };
+    if (!started) {
+      queued.push(event);
+      return;
+    }
+    queueMicrotask(() => {
+      for (const listener of listeners) listener(event);
+    });
+  }
+  function arrive(target: string, navigated: boolean): void {
+    current = target;
+    deliver({ house: 'address', address: current, navigated });
+  }
+  const port: HouseMessagePort = {
+    postMessage(message) {
+      const data = message as { house?: unknown; mode?: unknown; address?: unknown } | null;
+      if (data === null || typeof data !== 'object' || data.house !== 'navigate') return;
+      if (typeof data.address !== 'string') return;
+      navigations.push({
+        mode: data.mode === 'replace' ? 'replace' : 'push',
+        address: data.address,
+      });
+      arrive(data.address, true);
+    },
+    addEventListener(_type, listener) {
+      listeners.add(listener);
+    },
+    start() {
+      started = true;
+      const held = queued.splice(0);
+      queueMicrotask(() => {
+        for (const event of held) {
+          for (const listener of listeners) listener(event);
+        }
+      });
+    },
+  };
+  deliver({ house: 'address', address: current, navigated: false });
+  const host: TestBridgeHost = {
+    port: Promise.resolve(port),
+    navigations,
+    address() {
+      return current;
+    },
+    open(asked) {
+      arrive(asked, false);
+    },
+  };
+  return { host, bridge: connectHouseBridge(host.port) };
 }
 
 export async function waitForRooms(

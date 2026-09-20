@@ -225,10 +225,36 @@ browser light and dark defaults. Browser acceptance is owned by
 ## Screens
 
 `src/index.html` holds the seven screens as plain HTML. `connectApp()` obtains
-the Runtime port from the bridge client and calls `bindApp`. `bindApp(runtime)`
+the Runtime port from the bridge client and calls `bindApp`. `bindApp(runtime, bridge)`
 clones that template, binds the Sync Status indicator, and fills each screen
-from the public remote client only. Presentation State is which screen is
-shown and which file Document View is bound to.
+from the public remote client only. The bridge delivers and accepts the remainder
+below the App's path. That remainder is a path, not a URL: query and fragment are
+split off by the first `#` and then the first `?` in what remains. A path that is
+empty or `/` is the absence of an address below the App's path, including a
+delivery that is only query or only fragment, and reads Presentation State back.
+Production delivery is a path slice of the shell URL below the App root, so a
+remainder beginning `//` or a leading `scheme:` reaches the App as the path it
+is. A leading `\` is normalised to `/` by the browser before JavaScript sees
+`location.pathname`, so the delivered remainder is `//…`, which the App handles.
+Navigate-admission refuses `//` as an open-redirect check and should. The
+published in-page test host applies that outbound grammar to inbound delivery,
+so `//` and `scheme:` never arrive through it; that is
+[core#2076](https://github.com/agentshouse/core/issues/2076). The App parses the
+remainder as a path anyway, so it does not depend on the shell's filtering. The
+remainder names a screen and, for File, a Room locator and Document path; main
+resolves it against the Runtime and asks the bridge client to push or replace it.
+A re-push of the same File document keeps the query and fragment; a move to a
+different document or another screen drops them. An unrecognized remainder, including a malformed
+percent escape, is named on Rooms and does not yield to Presentation State.
+A remainder the shell refuses, including an over-long remainder, is dropped
+silently: `go` does not surface `HouseNavigationRefused`, and the App stays on
+the screen it already shows. The length bound is owned by
+[`@agentshouse/app-bridge`](https://www.npmjs.com/package/@agentshouse/app-bridge).
+Presentation State is which screen is shown and which file Document View is
+bound to, written through the client's presentation surface and observed so a
+tab with no address below the App path follows it. A failed presentation read
+still starts the App and is shown on Storage, and does not write over the unread
+store; a failed presentation write is shown there too.
 
 ```js
 import { connectApp } from './index.js';
@@ -242,7 +268,7 @@ await connectApp();
 | File    | existing Document View                                                                                                                         |
 | Work    | `draft.list()` / `observe('drafts')` for every durable Draft, and `observe('queue')` per Room with outcome kind and structured code and fields |
 | Refusal | `observe('connection-refusal')`; `reauthorize` when `reauthorizationOffered`                                                                   |
-| Storage | `observe('storage-loss')` with the reported persistence answer                                                                                 |
+| Storage | `observe('storage-loss')` with the reported persistence answer; a failed presentation read or write is named on the same surface               |
 | Log     | `log()` shown as text and downloaded as `synchronization-log.txt`                                                                              |
 
 Work renders the complete public Draft snapshot by Room locator and Path,
