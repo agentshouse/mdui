@@ -39,43 +39,36 @@ function fileSuffix(room: string, path: string): string {
 }
 
 function parseAddress(address: string): {
-  base: string;
   screen: Addressed | null;
   room: string | null;
   path: string | null;
+  search: string;
+  hash: string;
 } {
   const url = new URL(address, 'https://house.invalid');
   const segments = url.pathname.split('/').filter((part) => part.length > 0);
-  const fileIndex = segments.indexOf('file');
-  if (fileIndex >= 0) {
-    const after = segments.slice(fileIndex + 1).map(decodeSegment);
+  const search = url.search;
+  const hash = url.hash;
+  const head = segments[0];
+  if (head === 'file') {
+    const after = segments.slice(1).map(decodeSegment);
     return {
-      base: fileIndex === 0 ? '' : `/${segments.slice(0, fileIndex).join('/')}`,
       screen: 'file',
       room: after[0] ?? null,
       path: after.length > 1 ? after.slice(1).join('/') : null,
+      search,
+      hash,
     };
   }
-  const last = segments.at(-1);
-  if (last !== undefined && addressed(last)) {
-    return {
-      base: segments.length === 1 ? '' : `/${segments.slice(0, -1).join('/')}`,
-      screen: last,
-      room: null,
-      path: null,
-    };
+  if (head !== undefined && addressed(head) && segments.length === 1) {
+    return { screen: head, room: null, path: null, search, hash };
   }
-  return {
-    base: segments.length === 0 ? '' : `/${segments.join('/')}`,
-    screen: null,
-    room: null,
-    path: null,
-  };
+  return { screen: null, room: null, path: null, search, hash };
 }
 
-function composeAddress(base: string, suffix: string): string {
-  if (suffix === '') return base === '' ? '/' : `${base}/`;
-  return `${base}/${suffix}`;
+function composeAddress(suffix: string, extras: { search?: string; hash?: string } = {}): string {
+  const path = suffix === '' ? '/' : `/${suffix}`;
+  return `${path}${extras.search ?? ''}${extras.hash ?? ''}`;
 }
 
 function parsePresentation(value: unknown): {
@@ -286,6 +279,9 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   let lastPresentation: string | undefined;
   let heldRefusal: ConnectionRefusal | null = null;
   let generation = 0;
+  let runtimeStorage: string | null = null;
+  let presentationReadFault: string | null = null;
+  let presentationWriteFault: string | null = null;
 
   function cleanup(): void {
     closed = true;
@@ -358,8 +354,14 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
     lastPresentation = snapshot;
     try {
       await runtime.presentation.write(value);
-    } catch {
-      lastPresentation = undefined;
+      if (presentationWriteFault !== null) {
+        presentationWriteFault = null;
+        await presentStorage(runtimeStorage);
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      presentationWriteFault = `Presentation State could not be written: ${reason}`;
+      await presentStorage(runtimeStorage);
     }
   }
 
@@ -415,18 +417,17 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
 
   async function restorePresentation(
     stored: { screen: Addressed; room?: string; path?: string },
-    base: string,
     token: number,
   ): Promise<void> {
     if (closed || freezeAddress() || token !== generation) return;
     holdOpenFile(stored);
     if (stored.screen === 'rooms') {
-      await applyAddress(composeAddress(base, ''));
+      await applyAddress(composeAddress(''));
       return;
     }
     if (closed || freezeAddress() || token !== generation) return;
     if (parseAddress(bridge.address() ?? '/').screen !== null) return;
-    await bridge.replace(composeAddress(base, presentationSuffix(stored)));
+    await bridge.replace(composeAddress(presentationSuffix(stored)));
   }
 
   async function applyStart(address: string): Promise<void> {
@@ -440,12 +441,15 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
     let stored = null;
     try {
       stored = parsePresentation(await runtime.presentation.read());
-    } catch {
+    } catch (error) {
       stored = null;
+      const reason = error instanceof Error ? error.message : String(error);
+      presentationReadFault = `Presentation State could not be read: ${reason}`;
+      await presentStorage(runtimeStorage);
     }
     if (closed || freezeAddress() || token !== generation) return;
     if (stored !== null) {
-      await restorePresentation(stored, parsed.base, token);
+      await restorePresentation(stored, token);
       return;
     }
     await applyAddress(address);
@@ -458,17 +462,27 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
     if (parsed.screen !== null) return;
     const stored = parsePresentation(value);
     if (stored === null) return;
-    await restorePresentation(stored, parsed.base, token);
+    await restorePresentation(stored, token);
   }
 
   async function go(screen: Addressed, file?: { room: string; path: string }): Promise<void> {
-    const suffix =
-      screen === 'file' && file !== undefined
-        ? fileSuffix(file.room, file.path)
-        : screen === 'file' && openRoom !== undefined && openPath !== undefined
-          ? fileSuffix(openRoom, openPath)
-          : screen;
-    await bridge.push(composeAddress(parseAddress(bridge.address() ?? '/').base, suffix));
+    const held = parseAddress(bridge.address() ?? '/');
+    const target =
+      screen === 'file'
+        ? (file ??
+          (openRoom !== undefined && openPath !== undefined
+            ? { room: openRoom, path: openPath }
+            : undefined))
+        : undefined;
+    const suffix = target !== undefined ? fileSuffix(target.room, target.path) : screen;
+    const sameDocument =
+      target !== undefined &&
+      held.screen === 'file' &&
+      held.room === target.room &&
+      held.path === target.path;
+    await bridge.push(
+      composeAddress(suffix, sameDocument ? { search: held.search, hash: held.hash } : {}),
+    );
   }
 
   async function presentRooms(rooms: readonly AppRoom[]): Promise<void> {
@@ -624,10 +638,15 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   }
 
   function presentRefusal(refusal: ConnectionRefusal | null): void {
+    const resume = heldRefusal !== null && refusal === null;
     heldRefusal = refusal;
     if (refusal === null) {
       refusalPart.textContent = 'No Connection Refusal';
       reauthorize.hidden = true;
+      if (resume) {
+        const address = bridge.address();
+        if (address !== null) void applyStart(address);
+      }
       return;
     }
     refusalPart.textContent = connectionRefusalText(refusal);
@@ -636,9 +655,13 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   }
 
   async function presentStorage(statement: string | null): Promise<void> {
+    runtimeStorage = statement;
     const persistence = await runtime.persistence();
     if (closed) return;
-    storagePart.textContent = `${statement ?? 'No storage loss.'} ${String(persistence)}`;
+    const parts = [runtimeStorage, presentationReadFault, presentationWriteFault].filter(
+      (part): part is string => typeof part === 'string' && part.length > 0,
+    );
+    storagePart.textContent = `${parts.length === 0 ? 'No storage loss.' : parts.join(' ')} ${String(persistence)}`;
   }
 
   async function presentLog(): Promise<string> {

@@ -313,6 +313,11 @@ test('Refusal shows a revoked Connection Refusal and re-authorization restores t
     window.screensFixture.adapter.script('discover', undefined);
   });
   await page.getByRole('button', { name: 'Re-authorize' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Rooms' })).toBeVisible();
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Refusal' })
+    .click();
   await expect(page.getByRole('status', { name: 'Connection Refusal' })).toContainText(
     'No Connection Refusal',
   );

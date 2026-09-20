@@ -164,44 +164,74 @@ test('opening a file and moving between screens push, and a delivered address la
   await expect(page.locator('md-document-view')).toContainText('beta unique phrase');
 });
 
-async function remount(page: Page, address: string) {
-  await page.evaluate(async (address) => {
-    const { adapter, runtimeHost, shell, stop, unbind } = window.addressFixture;
-    if (runtimeHost === undefined) throw new Error('The Runtime host is missing.');
-    unbind();
-    const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
-    const helper = '/src/testing.js';
-    const { openTestBridge, waitForRooms } = await import(helper);
-    const specifier = '/src/app.js';
-    const { bindApp } = (await import(specifier)) as {
-      bindApp: (runtime: MdRuntimeClient, bridge: HouseBridge) => Promise<() => void>;
-    };
-    const channel = new MessageChannel();
-    const detach = runtimeHost.attach(channel.port1, 'mdui');
-    const runtime = connectMdRuntime(channel.port2);
-    const { host, bridge } = openTestBridge(address);
-    const next = await bindApp(runtime, bridge);
-    window.addressFixture = {
-      runtime,
-      runtimeHost,
-      adapter,
-      host,
-      bridge,
-      shell,
-      stop: () => {
-        next();
-        detach();
-        stop();
-      },
-      unbind: next,
-      seen: [],
-    };
-    await waitForRooms(
-      runtime,
-      (visible: readonly { roomVersion: string | null }[]) =>
-        visible.length === 1 && visible.every((room) => room.roomVersion !== null),
-    );
-  }, address);
+async function remount(
+  page: Page,
+  address: string,
+  faults: { read?: string; write?: string } = {},
+) {
+  await page.evaluate(
+    async ({ address, faults }) => {
+      const { adapter, runtimeHost, shell, stop, unbind } = window.addressFixture;
+      if (runtimeHost === undefined) throw new Error('The Runtime host is missing.');
+      unbind();
+      const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
+      const helper = '/src/testing.js';
+      const { openTestBridge, waitForRooms } = await import(helper);
+      const specifier = '/src/app.js';
+      const { bindApp } = (await import(specifier)) as {
+        bindApp: (runtime: MdRuntimeClient, bridge: HouseBridge) => Promise<() => void>;
+      };
+      const channel = new MessageChannel();
+      const detach = runtimeHost.attach(channel.port1, 'mdui');
+      const connected = connectMdRuntime(channel.port2);
+      const runtime =
+        faults.read === undefined && faults.write === undefined
+          ? connected
+          : new Proxy(connected, {
+              get(target, prop, receiver) {
+                if (prop === 'presentation') {
+                  return {
+                    async read() {
+                      if (faults.read !== undefined) throw new Error(faults.read);
+                      return target.presentation.read();
+                    },
+                    write(value: unknown) {
+                      if (faults.write !== undefined) {
+                        return Promise.reject(new Error(faults.write));
+                      }
+                      return target.presentation.write(value);
+                    },
+                  };
+                }
+                const value = Reflect.get(target, prop, receiver);
+                return typeof value === 'function' ? value.bind(target) : value;
+              },
+            });
+      const { host, bridge } = openTestBridge(address);
+      const next = await bindApp(runtime, bridge);
+      window.addressFixture = {
+        runtime,
+        runtimeHost,
+        adapter,
+        host,
+        bridge,
+        shell,
+        stop: () => {
+          next();
+          detach();
+          stop();
+        },
+        unbind: next,
+        seen: [],
+      };
+      await waitForRooms(
+        connected,
+        (visible: readonly { roomVersion: string | null }[]) =>
+          visible.length === 1 && visible.every((room) => room.roomVersion !== null),
+      );
+    },
+    { address, faults },
+  );
 }
 
 test('Presentation State is observed, restored without an address, and yields to one', async ({
@@ -246,10 +276,8 @@ test('Presentation State is observed, restored without an address, and yields to
   await expect(page.locator('md-document-view')).toContainText('beta unique phrase');
 });
 
-test('main composes addresses only under the App path and never pushes Refusal or Storage', async ({
-  page,
-}) => {
-  await start(page, { address: '/apps/mdui/' });
+test('main composes remainder addresses and never pushes Refusal or Storage', async ({ page }) => {
+  await start(page);
   await page
     .getByRole('article', { name: 'Studio' })
     .getByRole('button', { name: 'notes/hello.md' })
@@ -278,8 +306,8 @@ test('main composes addresses only under the App path and never pushes Refusal o
       })),
     ),
   ).toEqual([
-    { mode: 'push', address: '/apps/mdui/file/studio/notes/hello.md' },
-    { mode: 'push', address: '/apps/mdui/search' },
+    { mode: 'push', address: '/file/studio/notes/hello.md' },
+    { mode: 'push', address: '/search' },
   ]);
 });
 
@@ -409,23 +437,19 @@ test('a restore does not clobber an address delivered while presentation is stil
   );
 });
 
-test('a File address under an App path that names a screen still opens File', async ({ page }) => {
+test('a remainder that names the Work screen opens Work', async ({ page }) => {
+  await start(page, { address: '/work' });
+  await expect(page.getByRole('heading', { level: 1, name: 'Work' })).toBeVisible();
+});
+
+test('a path that is not a remainder below the App path does not open File or Work', async ({
+  page,
+}) => {
   await start(page, { address: '/apps/work/file/studio/notes/hello.md' });
-  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
-  await page
-    .getByRole('navigation', { name: 'Screens' })
-    .getByRole('button', { name: 'Search' })
-    .click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Search' })).toBeVisible();
-  expect(
-    await page.evaluate(() =>
-      window.addressFixture.host.navigations.map((entry) => ({
-        mode: entry.mode,
-        address: entry.address,
-      })),
-    ),
-  ).toEqual([{ mode: 'push', address: '/apps/work/search' }]);
+  await expect(page.getByRole('heading', { level: 1, name: 'Rooms' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeHidden();
+  await expect(page.getByRole('heading', { level: 1, name: 'Work' })).toBeHidden();
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveCount(0);
 });
 
 test('Document paths with a space or a hash round-trip through the address', async ({ page }) => {
@@ -563,6 +587,140 @@ test('the open file stays in Presentation State when the screen is not File', as
     .click();
   await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+});
+
+test('a re-push of the same document keeps query and fragment', async ({ page }) => {
+  await start(page, { address: '/file/studio/notes/hello.md?keep=1#Body' });
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'File' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      window.addressFixture.host.navigations.map((entry) => ({
+        mode: entry.mode,
+        address: entry.address,
+      })),
+    ),
+  ).toEqual([{ mode: 'push', address: '/file/studio/notes/hello.md?keep=1#Body' }]);
+});
+
+test('navigating to a different document drops query and fragment', async ({ page }) => {
+  await start(page, { address: '/file/studio/notes/hello.md?keep=1#Body' });
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await page.locator('md-document-view').evaluate((view) => {
+    view.dispatchEvent(
+      new CustomEvent('open-path', {
+        bubbles: true,
+        detail: { room: 'studio', path: 'notes/other.md' },
+      }),
+    );
+  });
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Other');
+  expect(await page.evaluate(() => window.addressFixture.host.address())).toBe(
+    '/file/studio/notes/other.md',
+  );
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Search' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Search' })).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      window.addressFixture.host.navigations.map((entry) => ({
+        mode: entry.mode,
+        address: entry.address,
+      })),
+    ),
+  ).toEqual([
+    { mode: 'push', address: '/file/studio/notes/other.md' },
+    { mode: 'push', address: '/search' },
+  ]);
+});
+
+test('a failed presentation read reports Storage and does not restore the last screen', async ({
+  page,
+}) => {
+  await start(page);
+  await page
+    .getByRole('article', { name: 'Studio' })
+    .getByRole('button', { name: 'notes/hello.md' })
+    .click();
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await remount(page, '/', { read: 'Injected presentation read failure' });
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Storage' })
+    .click();
+  await expect(page.getByRole('status', { name: 'Storage' })).toContainText(
+    'Presentation State could not be read: Injected presentation read failure',
+  );
+  expect(await page.evaluate(() => window.addressFixture.runtime.storageLoss())).toBeNull();
+});
+
+test('a failed presentation write reports Storage and still opens the file', async ({ page }) => {
+  await start(page);
+  await remount(page, '/file/studio/notes/hello.md', {
+    write: 'Injected presentation write failure',
+  });
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Storage' })
+    .click();
+  await expect(page.getByRole('status', { name: 'Storage' })).toContainText(
+    'Presentation State could not be written: Injected presentation write failure',
+  );
+  expect(await page.evaluate(() => window.addressFixture.runtime.storageLoss())).toBeNull();
+});
+
+test('clearing a live Refusal lands the address that was held while it was live', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.evaluate(
+    async (rooms) => {
+      const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
+      const helper = '/src/testing.js';
+      const { fixtureRoom, openTestBridge, openTestRuntime } = await import(helper);
+      const specifier = '/src/app.js';
+      const { bindApp } = (await import(specifier)) as {
+        bindApp: (runtime: MdRuntimeClient, bridge: HouseBridge) => Promise<() => void>;
+      };
+      const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) as never });
+      adapter.script('discover', { kind: 'revoked-authorization' });
+      const opened = await openTestRuntime(adapter, {
+        requiredGuarantees: [],
+        discoveryIntervalMs: 60_000,
+      });
+      const { host, bridge } = openTestBridge('/file/studio/notes/hello.md');
+      const unbind = await bindApp(opened.runtime, bridge);
+      window.addressFixture = {
+        runtime: opened.runtime,
+        runtimeHost: opened.host,
+        adapter,
+        host,
+        bridge,
+        shell: opened.shell,
+        stop: opened.stop,
+        unbind,
+        seen: [],
+      };
+    },
+    [studio],
+  );
+  await expect(page.getByRole('heading', { level: 1, name: 'Refusal' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeHidden();
+  await page.evaluate(() => {
+    const adapter = window.addressFixture.adapter;
+    if (adapter === undefined) throw new Error('The Adapter is missing.');
+    adapter.script('discover', undefined);
+  });
+  await page.getByRole('button', { name: 'Re-authorize' }).click();
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
 });
 
 test('connectApp opens a delivered File address over the bridge client', async ({ page }) => {

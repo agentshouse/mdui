@@ -227,12 +227,16 @@ browser light and dark defaults. Browser acceptance is owned by
 `src/index.html` holds the seven screens as plain HTML. `connectApp()` obtains
 the Runtime port from the bridge client and calls `bindApp`. `bindApp(runtime, bridge)`
 clones that template, binds the Sync Status indicator, and fills each screen
-from the public remote client only. The part of the shell address below the App's
-path names a screen and, for File, a Room locator and Document path; main
-resolves it against the Runtime and asks the bridge client to push or replace
-it. Presentation State is which screen is shown and which file Document View is
+from the public remote client only. The bridge delivers and accepts the remainder
+below the App's path. That remainder names a screen and, for File, a Room locator
+and Document path; main resolves it against the Runtime and asks the bridge
+client to push or replace it. A re-push of the same File document keeps the
+query and fragment; a move to a different document or another screen drops them.
+Presentation State is which screen is shown and which file Document View is
 bound to, written through the client's presentation surface and observed so a
-tab with no address below the App path follows it.
+tab with no address below the App path follows it. A failed presentation read
+still starts the App and is shown on Storage; a failed presentation write is
+shown there too.
 
 ```js
 import { connectApp } from './index.js';
@@ -246,7 +250,7 @@ await connectApp();
 | File    | existing Document View                                                                                                                         |
 | Work    | `draft.list()` / `observe('drafts')` for every durable Draft, and `observe('queue')` per Room with outcome kind and structured code and fields |
 | Refusal | `observe('connection-refusal')`; `reauthorize` when `reauthorizationOffered`                                                                   |
-| Storage | `observe('storage-loss')` with the reported persistence answer                                                                                 |
+| Storage | `observe('storage-loss')` with the reported persistence answer; a failed presentation read or write is named on the same surface               |
 | Log     | `log()` shown as text and downloaded as `synchronization-log.txt`                                                                              |
 
 Work renders the complete public Draft snapshot by Room locator and Path,
