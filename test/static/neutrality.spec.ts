@@ -15,7 +15,7 @@ test('refuses a Provider-specific import outside the Adapter and passes after it
       encoding: 'utf8',
     });
 
-  writeFileSync(entry, "import '@agentshouse/mdruntime';\n");
+  writeFileSync(entry, "import '@agentshouse/mdruntime/client';\n");
   expect(cruise().status).toBe(0);
 
   for (const source of [
@@ -28,6 +28,6 @@ test('refuses a Provider-specific import outside the Adapter and passes after it
     expect(refused.stdout + refused.stderr).toContain('neutrality');
   }
 
-  writeFileSync(entry, "import '@agentshouse/mdruntime';\n");
+  writeFileSync(entry, "import '@agentshouse/mdruntime/client';\n");
   expect(cruise().status).toBe(0);
 });

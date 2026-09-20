@@ -1,6 +1,13 @@
 import { expect, test } from '@playwright/test';
 
-test('loads the App source and reads Types and Query through the published in-memory Adapter', async ({
+declare global {
+  interface Window {
+    houseBridge?: Promise<unknown>;
+    houseBridgeComplete?: (port: unknown) => void;
+  }
+}
+
+test('loads the App source and reads Types and Query through the remote client', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -13,12 +20,15 @@ test('loads the App source and reads Types and Query through the published in-me
   await expect(page).toHaveTitle('MD UI');
 
   const visible = await page.evaluate(async () => {
-    const { createMdRuntime } = await import('@agentshouse/mdruntime');
+    const { createHouseBridgeTestHost } = await import('@agentshouse/app-bridge/test-host');
+    const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
+    const { serveMdRuntime } = await import('@agentshouse/mdruntime/host');
     const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
     const helper = '/src/testing.js';
-    const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
+    const { fixtureRoom, fixtureShell, runtimeOptions, waitForRooms } = await import(helper);
     const controller = new AbortController();
     try {
+      const house = createHouseBridgeTestHost();
       const adapter = createMemoryAdapter({
         rooms: [
           fixtureRoom({
@@ -36,21 +46,35 @@ test('loads the App source and reads Types and Query through the published in-me
           }),
         ],
       });
-      const runtime = createMdRuntime(
-        runtimeOptions({ adapter, requiredGuarantees: [], signal: controller.signal }),
+      const host = serveMdRuntime(
+        runtimeOptions({
+          adapter,
+          requiredGuarantees: [],
+          signal: controller.signal,
+          shell: fixtureShell(),
+        }),
       );
-      await waitForRooms(runtime, (rooms: ReturnType<typeof runtime.rooms>) =>
+      const appChannel = new MessageChannel();
+      const probeChannel = new MessageChannel();
+      host.attach(appChannel.port1, 'mdui');
+      host.attach(probeChannel.port1, 'mdui');
+      house.attachRuntime(appChannel.port2);
+      window.houseBridgeComplete?.(await house.port);
+      const runtime = connectMdRuntime(probeChannel.port2);
+      await waitForRooms(runtime, (rooms: readonly { roomVersion: string | null }[]) =>
         rooms.some((room) => room.roomVersion === 'v1'),
       );
-      const types = runtime.types('fixture');
+      const types = await runtime.types('fixture');
       return {
-        types: types.status === 'unavailable' ? [] : types.types,
-        query: runtime.query({ selector: { room: 'fixture', type: 'note' } }),
+        types: types.collection.status === 'unavailable' ? [] : types.collection.types,
+        query: await runtime.query({ selector: { room: 'fixture', type: 'note' } }),
+        bound: document.getElementById('app') !== null,
       };
     } finally {
       controller.abort();
     }
   });
+  expect(visible.bound).toBe(true);
   expect(visible.types).toEqual([
     {
       name: 'note',

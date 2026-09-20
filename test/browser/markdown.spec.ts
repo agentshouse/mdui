@@ -1,12 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { MdRuntime } from '@agentshouse/mdruntime';
+import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 
 type Renderer = HTMLElement & { text: string; resources: unknown[] };
 
 declare global {
   interface Window {
     markdownFixture: {
-      runtime: MdRuntime;
+      runtime: MdRuntimeClient;
       stop: () => void;
       paths: unknown[];
       resources: unknown[];
@@ -18,11 +18,9 @@ declare global {
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const { createMdRuntime } = await import('@agentshouse/mdruntime');
     const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
     const helper = '/src/testing.js';
-    const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
-    const controller = new AbortController();
+    const { fixtureRoom, openTestRuntime, waitForRooms } = await import(helper);
     const adapter = createMemoryAdapter({
       rooms: [
         fixtureRoom({
@@ -40,21 +38,15 @@ test.beforeEach(async ({ page }) => {
         }),
       ],
     });
-    const runtime = createMdRuntime(
-      runtimeOptions({
-        adapter,
-        requiredGuarantees: [],
-        signal: controller.signal,
-      }),
-    );
+    const opened = await openTestRuntime(adapter, { requiredGuarantees: [] });
     window.markdownFixture = {
-      runtime,
-      stop: () => controller.abort(),
+      runtime: opened.runtime,
+      stop: opened.stop,
       paths: [],
       resources: [],
       external: [],
     };
-    await waitForRooms(runtime, (rooms: ReturnType<typeof runtime.rooms>) =>
+    await waitForRooms(opened.runtime, (rooms: readonly { roomVersion: string | null }[]) =>
       rooms.some((room) => room.roomVersion === 'v1'),
     );
   });
@@ -65,7 +57,7 @@ test.afterEach(async ({ page }) => {
 });
 
 async function render(page: Page, text?: string) {
-  await page.evaluate((text) => {
+  await page.evaluate(async (text) => {
     const element = document.createElement('md-markdown') as Renderer;
     element.setAttribute('room', 'studio');
     element.setAttribute('path', 'docs/readme.md');
@@ -78,8 +70,11 @@ async function render(page: Page, text?: string) {
     );
     element.text =
       text ??
-      window.markdownFixture.runtime.query({ selector: { room: 'studio', path: 'docs/readme.md' } })
-        .documents[0].sections.Body;
+      (
+        await window.markdownFixture.runtime.query({
+          selector: { room: 'studio', path: 'docs/readme.md' },
+        })
+      ).documents[0].sections.Body;
     document.body.append(element);
   }, text);
   return page.locator('md-markdown');

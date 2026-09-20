@@ -1,14 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import type { MdRuntime } from '@agentshouse/mdruntime';
+import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import type { MemoryAdapter } from '@agentshouse/mdruntime/memory';
 
 declare global {
   interface Window {
     screensFixture: {
-      runtime: MdRuntime;
+      runtime: MdRuntimeClient;
       adapter: MemoryAdapter;
       stop: () => void;
+      liveObservations: () => number;
+      shell: import('@agentshouse/mdruntime').RuntimeShell;
+      unbind: () => void;
     };
   }
 }
@@ -58,34 +61,33 @@ async function start(
   await page.goto('/');
   await page.evaluate(
     async ({ rooms, options }) => {
-      const { createMdRuntime } = await import('@agentshouse/mdruntime');
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const helper = '/src/testing.js';
-      const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
+      const { fixtureRoom, openTestRuntime, waitForRooms } = await import(helper);
       const specifier = '/src/app.js';
       const { bindApp } = (await import(specifier)) as {
-        bindApp: (runtime: MdRuntime) => () => void;
+        bindApp: (
+          runtime: import('@agentshouse/mdruntime/client').MdRuntimeClient,
+        ) => Promise<() => void>;
       };
-      const controller = new AbortController();
       const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) as never });
-      const runtime = createMdRuntime(
-        runtimeOptions({
-          adapter,
-          requiredGuarantees: options.requiredGuarantees ?? [],
-          signal: controller.signal,
-          discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
-        }),
-      );
+      const opened = await openTestRuntime(adapter, {
+        requiredGuarantees: options.requiredGuarantees ?? [],
+        discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
+      });
+      const unbind = await bindApp(opened.runtime);
       window.screensFixture = {
-        runtime,
+        runtime: opened.runtime,
         adapter,
-        stop: () => controller.abort(),
+        stop: opened.stop,
+        liveObservations: opened.liveObservations,
+        shell: opened.shell,
+        unbind,
       };
-      bindApp(runtime);
       if ((options.requiredGuarantees ?? []).length > 0) return;
       await waitForRooms(
-        runtime,
-        (visible: ReturnType<typeof runtime.rooms>) =>
+        opened.runtime,
+        (visible: readonly { roomVersion: string | null }[]) =>
           visible.length === rooms.length && visible.every((room) => room.roomVersion !== null),
       );
     },
@@ -247,7 +249,8 @@ test('Work lists Drafts across Rooms and Pending Change queues with Provider tex
       kind: 'conflicted',
       roomVersion: 'v3',
       affected: { 'notes/other.md': other },
-      text: 'title was changed on the Provider',
+      code: 'title_conflict',
+      fields: { detail: 'title was changed on the Provider' },
     });
     const result = await runtime.save('studio', [
       { kind: 'field', path: 'notes/other.md', name: 'title', value: 'Changed' },
@@ -262,7 +265,7 @@ test('Work lists Drafts across Rooms and Pending Change queues with Provider tex
   await expect(drafts.getByText('studio notes/hello.md', { exact: true })).toBeVisible();
   await expect(drafts.getByText('archive notes/hello.md', { exact: true })).toBeVisible();
   await expect(page.getByRole('article', { name: 'Studio Pending Changes' })).toContainText(
-    'Conflicted',
+    'title_conflict',
   );
   await expect(page.getByRole('article', { name: 'Studio Pending Changes' })).toContainText(
     'title was changed on the Provider',
@@ -338,24 +341,32 @@ test('Storage shows the Runtime storage-loss statement after durable state is ev
             }),
         ),
       );
-      const { createMdRuntime } = await import('@agentshouse/mdruntime');
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const helper = '/src/testing.js';
-      const { fixtureRoom, runtimeOptions, waitForRooms } = await import(helper);
+      const { fixtureRoom, openTestRuntime, waitForRooms } = await import(helper);
       const specifier = '/src/app.js';
       const { bindApp } = (await import(specifier)) as {
-        bindApp: (runtime: MdRuntime) => () => void;
+        bindApp: (
+          runtime: import('@agentshouse/mdruntime/client').MdRuntimeClient,
+        ) => Promise<() => void>;
       };
-      const controller = new AbortController();
       const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) as never });
-      const runtime = createMdRuntime(
-        runtimeOptions({ adapter, requiredGuarantees: [], signal: controller.signal }),
-      );
-      window.screensFixture = { runtime, adapter, stop: () => controller.abort() };
-      bindApp(runtime);
+      const opened = await openTestRuntime(adapter, {
+        requiredGuarantees: [],
+        shell: window.screensFixture.shell,
+      });
+      const unbind = await bindApp(opened.runtime);
+      window.screensFixture = {
+        runtime: opened.runtime,
+        adapter,
+        stop: opened.stop,
+        liveObservations: opened.liveObservations,
+        shell: opened.shell,
+        unbind,
+      };
       await waitForRooms(
-        runtime,
-        (visible: ReturnType<typeof runtime.rooms>) =>
+        opened.runtime,
+        (visible: readonly { roomVersion: string | null }[]) =>
           visible.length === 2 && visible.every((room) => room.roomVersion !== null),
       );
     },
@@ -366,7 +377,7 @@ test('Storage shows the Runtime storage-loss statement after durable state is ev
     .getByRole('button', { name: 'Storage' })
     .click();
   await expect(page.getByRole('status', { name: 'Storage' })).toHaveText(
-    'Unsynchronized Drafts and Pending Changes were lost.',
+    'Unsynchronized Drafts and Pending Changes were lost. true',
   );
   await page
     .getByRole('navigation', { name: 'Screens' })
@@ -386,8 +397,8 @@ test('Log shows and exports the Runtime synchronization log as text', async ({ p
     .getByRole('navigation', { name: 'Screens' })
     .getByRole('button', { name: 'Log' })
     .click();
-  const shown = await page.evaluate(() => {
-    const text = window.screensFixture.runtime.log();
+  const shown = await page.evaluate(async () => {
+    const text = await window.screensFixture.runtime.log();
     const region = document.querySelector('[data-part="log"]');
     if (region?.textContent !== text) throw new Error('the Log screen did not show runtime.log()');
     return text;
@@ -481,4 +492,47 @@ test('every screen is labelled, keyboard-focusable, 360px, desktop, and light an
   expect(
     await page.locator('#app').evaluate((element) => getComputedStyle(element).backgroundColor),
   ).toBe('rgb(238, 242, 255)');
+});
+
+test('Refusal shows the client/host protocol mismatch as a Connection Refusal', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
+    const specifier = '/src/app.js';
+    const { bindApp } = (await import(specifier)) as {
+      bindApp: (
+        runtime: import('@agentshouse/mdruntime/client').MdRuntimeClient,
+      ) => Promise<() => void>;
+    };
+    const channel = new MessageChannel();
+    channel.port1.addEventListener('message', () => {
+      channel.port1.postMessage({ mdRuntime: 0, message: { kind: 'result', id: 0, value: null } });
+    });
+    channel.port1.start();
+    await bindApp(connectMdRuntime(channel.port2));
+  });
+  await expect(page.getByRole('status', { name: 'Connection Refusal' })).toContainText(
+    'client-host-protocol-mismatch',
+  );
+});
+
+test('opening files and unbinding leaves no live host observation', async ({ page }) => {
+  await start(page);
+  await page.evaluate(async () => {
+    const view = document.querySelector('md-document-view') as HTMLElement & {
+      bind: (
+        runtime: import('@agentshouse/mdruntime/client').MdRuntimeClient,
+        room: string,
+        path: string,
+      ) => void;
+    };
+    const runtime = window.screensFixture.runtime;
+    view.bind(runtime, 'studio', 'notes/hello.md');
+    view.bind(runtime, 'studio', 'notes/other.md');
+    view.bind(runtime, 'studio', 'notes/counted.md');
+    window.screensFixture.unbind();
+  });
+  await expect.poll(() => page.evaluate(() => window.screensFixture.liveObservations())).toBe(0);
 });

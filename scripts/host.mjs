@@ -12,6 +12,9 @@ const input = {};
 for (const specifier of [
   ...Object.keys(dependencies),
   '@agentshouse/mdruntime/memory',
+  '@agentshouse/mdruntime/client',
+  '@agentshouse/mdruntime/host',
+  '@agentshouse/app-bridge/test-host',
   '@agentshouse/mdmodel',
   '@agentshouse/query',
   'micromark-core-commonmark',
@@ -62,7 +65,15 @@ const server = createServer(async (request, response) => {
     }
     if (name.startsWith('src/') && extname(path) === '.js') path = path.slice(0, -3) + '.ts';
     let body = extname(path) === '.ts' ? (await transformFile(path)).code : await readFile(path);
-    if (name === 'src/index.html') body = body.toString().replace('<head>', `<head>\n${importMap}`);
+    if (name === 'src/index.html') {
+      body = body
+        .toString()
+        .replace('<head>', `<head>\n${importMap}`)
+        .replace(
+          '<script type="module" src="/src/index.js"></script>',
+          '<script>globalThis.houseBridge ??= new Promise((resolve) => { globalThis.houseBridgeComplete = resolve; });</script>\n<script type="module" src="/src/index.js"></script>',
+        );
+    }
     response.writeHead(200, {
       'content-type': types.get(extname(path)) ?? 'application/octet-stream',
     });

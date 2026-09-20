@@ -2,12 +2,18 @@ import { parse, validate } from '@agentshouse/mdmodel';
 import { query } from '@agentshouse/query';
 import type {
   AttachedModelBinding,
-  MdRuntime,
   MdRuntimeOptions,
   MdType,
   ModelResult,
   QueryBinding,
+  RuntimeShell,
 } from '@agentshouse/mdruntime';
+import {
+  connectMdRuntime,
+  type MdRuntimeClient,
+  type RuntimePort,
+} from '@agentshouse/mdruntime/client';
+import { serveMdRuntime, type MdRuntimeHost } from '@agentshouse/mdruntime/host';
 import type { MemoryAdapter, MemoryRoom } from '@agentshouse/mdruntime/memory';
 
 type FixtureRoom = {
@@ -98,6 +104,22 @@ export function fixtureRoom(room: FixtureRoom): MemoryRoom {
   };
 }
 
+export function fixtureShell(reported: { persistentStorage?: boolean } = {}): RuntimeShell & {
+  generation: string | null;
+} {
+  const kept = {
+    persistentStorage: reported.persistentStorage ?? true,
+    generation: null as string | null,
+    keepGeneration(value: string) {
+      kept.generation = value;
+    },
+    dropGeneration() {
+      kept.generation = null;
+    },
+  };
+  return kept;
+}
+
 export function runtimeOptions(
   options: Omit<MdRuntimeOptions, 'modelBinding' | 'queryBinding'>,
 ): MdRuntimeOptions {
@@ -105,23 +127,86 @@ export function runtimeOptions(
 }
 
 export async function waitForRooms(
-  runtime: MdRuntime,
-  matches: (rooms: ReturnType<MdRuntime['rooms']>) => boolean,
+  runtime: MdRuntimeClient,
+  matches: (rooms: Awaited<ReturnType<MdRuntimeClient['rooms']>>) => boolean,
 ): Promise<void> {
-  await new Promise<void>((resolve) => {
-    const stop = runtime.observe('rooms', (rooms) => {
-      if (!matches(rooms)) return;
-      stop();
-      resolve();
-    });
+  let stop: (() => void) | undefined;
+  let done = false;
+  await new Promise<void>((resolve, reject) => {
+    void runtime
+      .observe('rooms', (rooms) => {
+        if (done || !matches(rooms)) return;
+        done = true;
+        stop?.();
+        resolve();
+      })
+      .then((end) => {
+        stop = end;
+        if (done) end();
+      }, reject);
   });
 }
 
-export function createFixtureRuntime(
+function trackedPort(port: MessagePort): { port: RuntimePort; live: () => number } {
+  let live = 0;
+  return {
+    port: {
+      postMessage(message: unknown) {
+        const body = (message as { message?: { kind?: string } }).message;
+        if (body?.kind === 'observe') live += 1;
+        if (body?.kind === 'stop') live -= 1;
+        port.postMessage(message);
+      },
+      addEventListener(type: 'message' | 'close', listener: (event: { data?: unknown }) => void) {
+        port.addEventListener(type, listener as EventListener);
+      },
+      start() {
+        port.start();
+      },
+    },
+    live: () => live,
+  };
+}
+
+export async function openTestRuntime(
   adapter: MemoryAdapter,
-  options: Omit<MdRuntimeOptions, 'adapter' | 'modelBinding' | 'queryBinding'>,
-): Promise<MdRuntime> {
-  return import('@agentshouse/mdruntime').then(({ createMdRuntime }) =>
-    createMdRuntime(runtimeOptions({ ...options, adapter })),
+  options: Partial<
+    Omit<MdRuntimeOptions, 'adapter' | 'modelBinding' | 'queryBinding' | 'shell'>
+  > & {
+    shell?: RuntimeShell;
+    app?: string;
+  } = {},
+): Promise<{
+  runtime: MdRuntimeClient;
+  host: MdRuntimeHost;
+  stop: () => void;
+  liveObservations: () => number;
+  shell: RuntimeShell;
+}> {
+  const owned = options.signal === undefined ? new AbortController() : undefined;
+  const shell = options.shell ?? fixtureShell();
+  const host = serveMdRuntime(
+    runtimeOptions({
+      adapter,
+      requiredGuarantees: options.requiredGuarantees ?? [],
+      discoveryIntervalMs: options.discoveryIntervalMs,
+      signal: options.signal ?? owned!.signal,
+      shell,
+    }),
   );
+  const channel = new MessageChannel();
+  const tracked = trackedPort(channel.port2);
+  const detach = host.attach(channel.port1, options.app ?? 'mdui');
+  return {
+    runtime: connectMdRuntime(tracked.port),
+    host,
+    liveObservations: tracked.live,
+    shell,
+    stop() {
+      detach();
+      channel.port1.close();
+      channel.port2.close();
+      owned?.abort();
+    },
+  };
 }

@@ -2,39 +2,35 @@ import type {
   AppRoom,
   ConnectionRefusal,
   DraftEntry,
-  MdRuntime,
   MdType,
   QueryDocument,
   QueueEntry,
 } from '@agentshouse/mdruntime';
+import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import { appStyles } from './components/theme.js';
-import { mdTypes } from './components/runtime.js';
+import { mdTypes, observation, queueKinds, refusalParts } from './components/runtime.js';
 import './components/status.js';
 import './components/view.js';
 
 type Screen = 'rooms' | 'search' | 'file' | 'work' | 'refusal' | 'storage' | 'log';
 
 type DocumentViewElement = HTMLElement & {
-  bind: (runtime: MdRuntime, room: string, path: string) => void;
+  bind: (runtime: MdRuntimeClient, room: string, path: string) => void;
 };
 
-type StatusElement = HTMLElement & { bind: (runtime: MdRuntime) => void };
+type StatusElement = HTMLElement & { bind: (runtime: MdRuntimeClient) => void };
 
 type TreeNode = { name: string; path: string; children?: TreeNode[] };
 
-const reasons: Record<ConnectionRefusal['reason'], string> = {
+const reasons: Record<
+  Exclude<ConnectionRefusal['reason'], 'client-host-protocol-mismatch'>,
+  string
+> = {
   'no-matching-version': 'No matching Room Contract version',
   'missing-required-guarantee': 'A required Capability is missing',
   'md-model-version-mismatch': 'The declared MD Model version cannot be loaded',
   'revoked-authorization': 'Authorization was revoked',
 };
-
-const outcomes = {
-  pending: 'Pending',
-  conflicted: 'Conflicted',
-  rejected: 'Rejected',
-  expired: 'Expired',
-} as const;
 
 let unbind = () => {};
 
@@ -151,7 +147,12 @@ function searchSelector(form: HTMLFormElement, types: readonly MdType[]): Record
   return { $and: clauses };
 }
 
-export function bindApp(runtime: MdRuntime): () => void {
+function connectionRefusalText(refusal: ConnectionRefusal): string {
+  if (refusal.reason === 'client-host-protocol-mismatch') return refusal.reason;
+  return reasons[refusal.reason];
+}
+
+export async function bindApp(runtime: MdRuntimeClient): Promise<() => void> {
   unbind();
   const template = document.getElementById('md-app');
   if (!(template instanceof HTMLTemplateElement))
@@ -187,6 +188,21 @@ export function bindApp(runtime: MdRuntime): () => void {
   let current: Screen = 'rooms';
   let draftRead = 0;
   let renderedRooms: string | undefined;
+  let visibleRooms: readonly AppRoom[] = [];
+  let closed = false;
+  let searchRead = 0;
+
+  function cleanup(): void {
+    closed = true;
+    draftRead += 1;
+    searchRead += 1;
+    for (const stop of queueStops) stop();
+    queueStops = [];
+    for (const stop of stops) stop();
+    stops.length = 0;
+    app.remove();
+  }
+  unbind = cleanup;
 
   function show(screen: Screen): void {
     current = screen;
@@ -203,7 +219,7 @@ export function bindApp(runtime: MdRuntime): () => void {
       void refreshDrafts();
       presentQueues();
     }
-    if (screen === 'log') presentLog();
+    if (screen === 'log') void presentLog();
   }
 
   function openFile(room: string, path: string): void {
@@ -211,12 +227,18 @@ export function bindApp(runtime: MdRuntime): () => void {
     show('file');
   }
 
-  function presentRooms(rooms: readonly AppRoom[]): void {
-    const content = rooms.map((room) => ({
-      room,
-      types: mdTypes(runtime.types(room.locator)),
-      paths: runtime.query({ selector: { room: room.locator } }).documents.map((file) => file.path),
-    }));
+  async function presentRooms(rooms: readonly AppRoom[]): Promise<void> {
+    visibleRooms = rooms;
+    const content = await Promise.all(
+      rooms.map(async (room) => ({
+        room,
+        types: mdTypes(room.model),
+        paths: (await runtime.query({ selector: { room: room.locator } })).documents.map(
+          (file) => file.path,
+        ),
+      })),
+    );
+    if (closed) return;
     const snapshot = JSON.stringify(content);
     if (snapshot === renderedRooms) return;
     renderedRooms = snapshot;
@@ -297,7 +319,7 @@ export function bindApp(runtime: MdRuntime): () => void {
 
   function presentQueues(): void {
     queuesPart.replaceChildren();
-    for (const room of runtime.rooms()) {
+    for (const room of visibleRooms) {
       const article = document.createElement('article');
       article.setAttribute('aria-label', `${room.name} Pending Changes`);
       const heading = document.createElement('h3');
@@ -306,12 +328,19 @@ export function bindApp(runtime: MdRuntime): () => void {
       for (const entry of queues.get(room.locator) ?? []) {
         const item = document.createElement('li');
         const kind = document.createElement('p');
-        kind.textContent = outcomes[entry.outcome.kind];
+        kind.textContent = queueKinds[entry.outcome.kind];
         item.append(kind);
-        if ('text' in entry.outcome) {
-          const text = document.createElement('p');
-          text.textContent = entry.outcome.text;
-          item.append(text);
+        if (entry.outcome.kind === 'retryable-refusal' && entry.outcome.reset !== undefined) {
+          const reset = document.createElement('p');
+          reset.textContent = entry.outcome.reset;
+          item.append(reset);
+        }
+        if ('code' in entry.outcome) {
+          for (const part of refusalParts(entry.outcome)) {
+            const text = document.createElement('p');
+            text.textContent = part;
+            item.append(text);
+          }
         }
         list.append(item);
       }
@@ -326,10 +355,12 @@ export function bindApp(runtime: MdRuntime): () => void {
     queues.clear();
     for (const room of rooms) {
       queueStops.push(
-        runtime.observe('queue', room.locator, (entries) => {
-          queues.set(room.locator, entries);
-          if (current === 'work') presentQueues();
-        }),
+        observation(
+          runtime.observe('queue', room.locator, (entries) => {
+            queues.set(room.locator, entries);
+            if (current === 'work') presentQueues();
+          }),
+        ),
       );
     }
   }
@@ -340,18 +371,20 @@ export function bindApp(runtime: MdRuntime): () => void {
       reauthorize.hidden = true;
       return;
     }
-    refusalPart.textContent = reasons[refusal.reason];
+    refusalPart.textContent = connectionRefusalText(refusal);
     reauthorize.hidden = !refusal.reauthorizationOffered;
     show('refusal');
   }
 
-  function presentStorage(statement: string | null): void {
-    storagePart.textContent = statement ?? 'No storage loss.';
+  async function presentStorage(statement: string | null): Promise<void> {
+    const persistence = await runtime.persistence();
+    if (closed) return;
+    storagePart.textContent = `${statement ?? 'No storage loss.'} ${String(persistence)}`;
   }
 
-  function presentLog(): string {
-    const text = runtime.log();
-    logPart.textContent = text;
+  async function presentLog(): Promise<string> {
+    const text = await runtime.log();
+    if (!closed) logPart.textContent = text;
     return text;
   }
 
@@ -365,20 +398,26 @@ export function bindApp(runtime: MdRuntime): () => void {
   });
   form.addEventListener('submit', (event) => {
     event.preventDefault();
+    const requested = ++searchRead;
     resultsPart.replaceChildren();
-    const types: MdType[] = [];
-    for (const room of runtime.rooms()) types.push(...mdTypes(runtime.types(room.locator)));
-    const text = String(new FormData(form).get('text') ?? '');
-    for (const file of runtime.query({ selector: searchSelector(form, types) }).documents) {
-      if (!matchesSearch(file, text)) continue;
-      const item = document.createElement('li');
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = `${file.room} ${file.path}`;
-      button.addEventListener('click', () => openFile(file.room, file.path));
-      item.append(button);
-      resultsPart.append(item);
-    }
+    void (async () => {
+      const types: MdType[] = [];
+      for (const room of visibleRooms) types.push(...mdTypes(room.model));
+      const text = String(new FormData(form).get('text') ?? '');
+      const result = await runtime.query({ selector: searchSelector(form, types) });
+      if (closed || requested !== searchRead) return;
+      resultsPart.replaceChildren();
+      for (const file of result.documents) {
+        if (!matchesSearch(file, text)) continue;
+        const item = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = `${file.room} ${file.path}`;
+        button.addEventListener('click', () => openFile(file.room, file.path));
+        item.append(button);
+        resultsPart.append(item);
+      }
+    })();
   });
   reauthorize.addEventListener('click', () => {
     void runtime.reauthorize();
@@ -387,52 +426,56 @@ export function bindApp(runtime: MdRuntime): () => void {
     void refreshDrafts();
   });
   app.querySelector('[data-part="export"]')?.addEventListener('click', () => {
-    const text = presentLog();
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'synchronization-log.txt';
-    link.click();
-    URL.revokeObjectURL(url);
+    void presentLog().then((text) => {
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'synchronization-log.txt';
+      link.click();
+      URL.revokeObjectURL(url);
+    });
   });
   app.addEventListener('open-path', (event) => {
     const detail = (event as CustomEvent<{ room: string; path: string }>).detail;
     openFile(detail.room, detail.path);
   });
 
-  stops.push(
-    runtime.observe('rooms', (rooms) => {
-      presentRooms(rooms);
-      watchQueues(rooms);
-      if (current === 'work') presentQueues();
-    }),
-  );
-  stops.push(
-    runtime.observe('query', {}, () => {
-      presentRooms(runtime.rooms());
-    }),
-  );
-  stops.push(
-    runtime.observe('drafts', (drafts) => {
-      draftRead += 1;
-      presentDrafts(drafts);
-    }),
-  );
-  stops.push(runtime.observe('connection-refusal', presentRefusal));
-  stops.push(runtime.observe('storage-loss', presentStorage));
-  stops.push(
-    runtime.observe('sync-status', () => {
-      if (current === 'log') presentLog();
-    }),
-  );
+  async function hold(start: Promise<() => void>): Promise<void> {
+    const end = await start;
+    if (closed) {
+      end();
+      return;
+    }
+    stops.push(end);
+  }
 
-  unbind = () => {
-    draftRead += 1;
-    for (const stop of queueStops) stop();
-    queueStops = [];
-    for (const stop of stops) stop();
-    stops.length = 0;
-    app.remove();
-  };
-  return unbind;
+  await Promise.all([
+    hold(
+      runtime.observe('rooms', (rooms) => {
+        void presentRooms(rooms);
+        watchQueues(rooms);
+        if (current === 'work') presentQueues();
+      }),
+    ),
+    hold(
+      runtime.observe('query', {}, () => {
+        void presentRooms(visibleRooms);
+      }),
+    ),
+    hold(
+      runtime.observe('drafts', (drafts) => {
+        draftRead += 1;
+        presentDrafts(drafts);
+      }),
+    ),
+    hold(runtime.observe('connection-refusal', presentRefusal)),
+    hold(runtime.observe('storage-loss', (statement) => void presentStorage(statement))),
+    hold(
+      runtime.observe('sync-status', () => {
+        if (current === 'log') void presentLog();
+      }),
+    ),
+  ]);
+
+  return cleanup;
 }

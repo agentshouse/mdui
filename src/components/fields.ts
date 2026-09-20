@@ -1,6 +1,7 @@
-import type { MdRuntime, QueryOptions } from '@agentshouse/mdruntime';
+import type { QueryOptions } from '@agentshouse/mdruntime';
+import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import { fieldStyles } from './theme.js';
-import { mdTypes } from './runtime.js';
+import { mdTypes, observation } from './runtime.js';
 
 export type FieldDefinition = {
   kind: string;
@@ -19,7 +20,7 @@ export abstract class FieldControl extends HTMLElement {
   protected definition: FieldDefinition | undefined;
   protected currentValue: unknown;
   protected fieldName = '';
-  protected runtime: MdRuntime | undefined;
+  protected runtime: MdRuntimeClient | undefined;
   protected room = '';
   protected readonly root = this.attachShadow({ mode: 'open' });
   protected get label(): string {
@@ -37,15 +38,24 @@ export abstract class FieldControl extends HTMLElement {
 
   abstract get validity(): FieldValidity;
 
-  bind(runtime: MdRuntime, room: string, type: string, field: string): void {
-    const definition = mdTypes(runtime.types(room)).find((entry) => entry.name === type)?.fields[
-      field
-    ] as FieldDefinition | undefined;
+  async bind(runtime: MdRuntimeClient, room: string, type: string, field: string): Promise<void> {
+    const definition = mdTypes((await runtime.types(room)).collection).find(
+      (entry) => entry.name === type,
+    )?.fields[field] as FieldDefinition | undefined;
+    this.bindDefinition(runtime, room, field, definition);
+  }
+
+  bindDefinition(
+    runtime: MdRuntimeClient,
+    room: string,
+    field: string,
+    definition: FieldDefinition | undefined,
+  ): void {
     this[configure](runtime, room, field, definition);
   }
 
   [configure](
-    runtime: MdRuntime,
+    runtime: MdRuntimeClient,
     room: string,
     field: string,
     definition: FieldDefinition | undefined,
@@ -368,8 +378,14 @@ export class ListField extends FieldControl {
 export class ReferenceField extends EnumField {
   protected override readonly kind = 'reference';
   private unobserve: (() => void) | undefined;
-  override bind(runtime: MdRuntime, room: string, type: string, field: string): void {
-    super.bind(runtime, room, type, field);
+  private paths: readonly string[] = [];
+  override bindDefinition(
+    runtime: MdRuntimeClient,
+    room: string,
+    field: string,
+    definition: FieldDefinition | undefined,
+  ): void {
+    super.bindDefinition(runtime, room, field, definition);
     this.watch();
   }
   override connectedCallback(): void {
@@ -381,7 +397,7 @@ export class ReferenceField extends EnumField {
     this.unobserve = undefined;
   }
   protected override choices(): readonly string[] {
-    return this.runtime!.query(this.queryOptions()).documents.map((document) => document.path);
+    return this.paths;
   }
   private queryOptions(): QueryOptions {
     return {
@@ -395,11 +411,14 @@ export class ReferenceField extends EnumField {
   private watch(): void {
     this.unobserve?.();
     this.unobserve = undefined;
-    if (this.isConnected && this.definition) {
-      this.unobserve = this.runtime!.observe('query', this.queryOptions(), () => {
-        this.writeValue();
-        this.presentValidity();
-      });
+    if (this.isConnected && this.definition && this.runtime !== undefined) {
+      this.unobserve = observation(
+        this.runtime.observe('query', this.queryOptions(), (result) => {
+          this.paths = result.documents.map((document) => document.path);
+          this.writeValue();
+          this.presentValidity();
+        }),
+      );
     }
   }
 }
