@@ -157,7 +157,13 @@ being typed into; the field keeps its value and focus until the user commits it.
 The renderer seam also
 accepts adversarial text directly through its public property, independently
 of Model collection validity; normal section input is read through Query.
-The pure lane qualifies the renderer dependencies against the
+The pure lane owns `test/pure/address.spec.ts` and the renderer corpus.
+`test/pure/address.spec.ts` asserts `splitAddress` and `parseAddress` on the
+remainder grammar, including production-delivered `//` and `scheme:` forms, a
+leading `\` the browser would already have folded to `/`, empty or `/` as no
+remainder, File versus addressed screen versus unroutable remainder, and decode
+of a space or `#`. The renderer corpus qualifies the renderer dependencies
+against the
 [original GFM 0.29 corpus](../../test/fixtures/README.md), preserving the source's
 base/extension distinction. It is not browser safety evidence, and its current
 configuration applies the historical inline-comment rule to both fixture modes

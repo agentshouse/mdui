@@ -337,10 +337,10 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
       return;
     }
     if (parsed.screen === 'file' || parsed.screen === null) {
-      if (parsed.screen === 'file' || parsed.remainder) nameUnresolved(address);
+      if (parsed.remainder) nameUnresolved(address);
       else nameUnresolved(null);
       reveal('rooms');
-      if (parsed.screen === null && !parsed.remainder) await writePresentation();
+      if (!parsed.remainder) await writePresentation();
       return;
     }
     nameUnresolved(null);

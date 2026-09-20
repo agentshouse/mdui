@@ -233,10 +233,12 @@ split off by the first `#` and then the first `?` in what remains. A path that i
 empty or `/` is the absence of an address below the App's path, including a
 delivery that is only query or only fragment, and reads Presentation State back.
 Production delivery is a path slice of the shell URL below the App root, so a
-remainder beginning `//`, a leading `scheme:`, or `\` reaches the App as the path
-it is. Navigate-admission refuses `//` as an open-redirect check and should. The
+remainder beginning `//` or a leading `scheme:` reaches the App as the path it
+is. A leading `\` is normalised to `/` by the browser before JavaScript sees
+`location.pathname`, so the delivered remainder is `//…`, which the App handles.
+Navigate-admission refuses `//` as an open-redirect check and should. The
 published in-page test host applies that outbound grammar to inbound delivery,
-so those forms never arrive through it; that is
+so `//` and `scheme:` never arrive through it; that is
 [core#2076](https://github.com/agentshouse/core/issues/2076). The App parses the
 remainder as a path anyway, so it does not depend on the shell's filtering. The
 remainder names a screen and, for File, a Room locator and Document path; main
