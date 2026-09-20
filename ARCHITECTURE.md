@@ -228,15 +228,20 @@ browser light and dark defaults. Browser acceptance is owned by
 the Runtime port from the bridge client and calls `bindApp`. `bindApp(runtime, bridge)`
 clones that template, binds the Sync Status indicator, and fills each screen
 from the public remote client only. The bridge delivers and accepts the remainder
-below the App's path. That remainder names a screen and, for File, a Room locator
-and Document path; main resolves it against the Runtime and asks the bridge
-client to push or replace it. A re-push of the same File document keeps the
-query and fragment; a move to a different document or another screen drops them.
-An unrecognized remainder, including a malformed percent escape, is named on Rooms
-and does not yield to Presentation State; only a start with no remainder reads the
-store back. A remainder the shell refuses, including one over 1000 characters, is
-not retried: `go` does not surface `HouseNavigationRefused`, and the App stays on
-the screen it already shows.
+below the App's path. That remainder is a path, not a URL: query and fragment are
+split off by the first `#` and then the first `?` in what remains. A path that is
+empty or `/` is the absence of an address below the App's path, including a
+delivery that is only query or only fragment, and reads Presentation State back.
+`//`, a leading `scheme:`, and `\` are path characters. The remainder names a
+screen and, for File, a Room locator and Document path; main resolves it against
+the Runtime and asks the bridge client to push or replace it. A re-push of the
+same File document keeps the query and fragment; a move to a different document
+or another screen drops them. An unrecognized remainder, including a malformed
+percent escape, is named on Rooms and does not yield to Presentation State.
+A remainder the shell refuses, including an over-long remainder, is dropped
+silently: `go` does not surface `HouseNavigationRefused`, and the App stays on
+the screen it already shows. The length bound is owned by
+[`@agentshouse/app-bridge`](https://www.npmjs.com/package/@agentshouse/app-bridge).
 Presentation State is which screen is shown and which file Document View is
 bound to, written through the client's presentation surface and observed so a
 tab with no address below the App path follows it. A failed presentation read

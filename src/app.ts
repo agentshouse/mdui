@@ -30,6 +30,16 @@ function fileSuffix(room: string, path: string): string {
   return `file/${encodeURIComponent(room)}/${encodeSegments(path)}`;
 }
 
+function splitAddress(address: string): { path: string; search: string; hash: string } {
+  const hashAt = address.indexOf('#');
+  const hash = hashAt === -1 ? '' : address.slice(hashAt);
+  const beforeHash = hashAt === -1 ? address : address.slice(0, hashAt);
+  const queryAt = beforeHash.indexOf('?');
+  const search = queryAt === -1 ? '' : beforeHash.slice(queryAt);
+  const path = queryAt === -1 ? beforeHash : beforeHash.slice(0, queryAt);
+  return { path, search, hash };
+}
+
 function parseAddress(address: string): {
   screen: Addressed | null;
   room: string | null;
@@ -38,11 +48,10 @@ function parseAddress(address: string): {
   hash: string;
   remainder: boolean;
 } {
-  const url = new URL(address, 'https://house.invalid');
-  const segments = url.pathname.split('/').filter((part) => part.length > 0);
-  const search = url.search;
-  const hash = url.hash;
-  const remainder = segments.length > 0;
+  const { path, search, hash } = splitAddress(address);
+  const remainder = path !== '' && path !== '/';
+  const body = path.startsWith('/') ? path.slice(1) : path;
+  const segments = remainder ? body.split('/') : [];
   const head = segments[0];
   if (head === 'file') {
     let after: string[];
@@ -278,6 +287,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   let openRoom: string | undefined;
   let openPath: string | undefined;
   let lastPresentation: string | undefined;
+  let unresolved: string | null = null;
   let heldRefusal: ConnectionRefusal | null = null;
   let generation = 0;
   let runtimeStorage: string | null = null;
@@ -331,6 +341,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   }
 
   function nameUnresolved(address: string | null): void {
+    unresolved = address;
     if (address === null) {
       unresolvedPart.hidden = true;
       unresolvedPart.textContent = '';
@@ -345,16 +356,16 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   }
 
   async function writePresentation(): Promise<void> {
-    if (!addressed(current) || !unresolvedPart.hidden) return;
+    if (!addressed(current) || unresolved !== null) return;
     const value =
       openRoom !== undefined && openPath !== undefined
         ? { screen: current, room: openRoom, path: openPath }
         : { screen: current };
     const snapshot = JSON.stringify(value);
     if (snapshot === lastPresentation) return;
-    lastPresentation = snapshot;
     try {
       await runtime.presentation.write(value);
+      lastPresentation = snapshot;
       if (presentationWriteFault !== null) {
         presentationWriteFault = null;
         await presentStorage(runtimeStorage);

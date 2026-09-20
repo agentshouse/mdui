@@ -47,11 +47,11 @@ const studio = {
 
 async function start(
   page: Page,
-  options: { address?: string; rooms?: unknown[]; app?: string } = {},
+  options: { address?: string; rooms?: unknown[]; app?: string; discover?: unknown } = {},
 ) {
   await page.goto('/');
   await page.evaluate(
-    async ({ address, rooms, app }) => {
+    async ({ address, rooms, app, discover, scriptDiscover }) => {
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const helper = '/src/testing.js';
       const { fixtureRoom, openTestBridge, openTestRuntime, waitForRooms } = await import(helper);
@@ -60,6 +60,7 @@ async function start(
         bindApp: (runtime: MdRuntimeClient, bridge: HouseBridge) => Promise<() => void>;
       };
       const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) as never });
+      if (scriptDiscover) adapter.script('discover', discover);
       const opened = await openTestRuntime(adapter, {
         requiredGuarantees: [],
         discoveryIntervalMs: 60_000,
@@ -78,6 +79,7 @@ async function start(
         unbind,
         seen: [],
       };
+      if (scriptDiscover) return;
       await waitForRooms(
         opened.runtime,
         (visible: readonly { roomVersion: string | null }[]) =>
@@ -88,6 +90,8 @@ async function start(
       address: options.address ?? '/',
       rooms: options.rooms ?? [studio],
       app: options.app ?? 'mdui',
+      discover: options.discover,
+      scriptDiscover: 'discover' in options,
     },
   );
 }
@@ -168,7 +172,13 @@ test('opening a file and moving between screens push, and a delivered address la
 async function remount(
   page: Page,
   address: string,
-  options: { read?: string; write?: string; duringRead?: string } = {},
+  options: {
+    read?: string;
+    write?: string;
+    writeOnce?: string;
+    duringRead?: string;
+    verbatim?: boolean;
+  } = {},
 ) {
   await page.evaluate(
     async ({ address, options }) => {
@@ -188,8 +198,10 @@ async function remount(
       const proxy =
         options.read !== undefined ||
         options.write !== undefined ||
+        options.writeOnce !== undefined ||
         options.duringRead !== undefined;
       let readStarted = false;
+      let writeOnce = options.writeOnce;
       const runtime = proxy
         ? new Proxy(connected, {
             get(target, prop, receiver) {
@@ -210,6 +222,11 @@ async function remount(
                     if (options.write !== undefined) {
                       return Promise.reject(new Error(options.write));
                     }
+                    if (writeOnce !== undefined) {
+                      const reason = writeOnce;
+                      writeOnce = undefined;
+                      return Promise.reject(new Error(reason));
+                    }
                     return target.presentation.write(value);
                   },
                 };
@@ -219,7 +236,7 @@ async function remount(
             },
           })
         : connected;
-      const { host, bridge } = openTestBridge(address);
+      const { host, bridge } = openTestBridge(address, { verbatim: options.verbatim === true });
       const bound = bindApp(runtime, bridge);
       let openAt = 0;
       if (options.duringRead !== undefined) {
@@ -479,6 +496,75 @@ test('an unrecognized remainder does not yield to a conflicting stored presentat
   ).toEqual({ address: '/notes', navigations: [] });
 });
 
+test('a remainder a URL parser would treat as authority does not yield to Presentation State', async ({
+  page,
+}) => {
+  await start(page, { address: '/file/studio/notes/hello.md' });
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  const remainders = [
+    '//notes',
+    'http:notes',
+    '/\\notes',
+    'https://notes',
+    '//file/studio/notes/hello.md',
+  ];
+  for (const remainder of remainders) {
+    await remount(page, remainder, { verbatim: true });
+    await expect(page.getByRole('heading', { level: 1, name: 'Rooms' })).toBeVisible();
+    await expect(page.getByRole('status', { name: 'Unresolved address' })).toHaveText(remainder);
+    await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeHidden();
+    await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveCount(0);
+    expect(
+      await page.evaluate(() => ({
+        address: window.addressFixture.host.address(),
+        navigations: window.addressFixture.host.navigations.map((entry) => ({
+          mode: entry.mode,
+          address: entry.address,
+        })),
+      })),
+    ).toEqual({ address: remainder, navigations: [] });
+  }
+});
+
+test('a same-origin path that looks like a URL is still the delivered remainder', async ({
+  page,
+}) => {
+  await start(page, { address: '/file/studio/notes/hello.md' });
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  for (const remainder of ['/http:notes', '/https://notes', '/file:studio/notes/hello.md']) {
+    await remount(page, remainder);
+    await expect(page.getByRole('heading', { level: 1, name: 'Rooms' })).toBeVisible();
+    await expect(page.getByRole('status', { name: 'Unresolved address' })).toHaveText(remainder);
+    await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeHidden();
+    expect(
+      await page.evaluate(() => ({
+        address: window.addressFixture.host.address(),
+        navigations: window.addressFixture.host.navigations.map((entry) => ({
+          mode: entry.mode,
+          address: entry.address,
+        })),
+      })),
+    ).toEqual({ address: remainder, navigations: [] });
+  }
+});
+
+test('a delivery whose path is empty or slash reads Presentation State', async ({ page }) => {
+  await start(page, { address: '/file/studio/notes/hello.md' });
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  for (const address of ['/?keep=1', '/#Body']) {
+    await remount(page, address);
+    await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+    expect(
+      await page.evaluate(() =>
+        window.addressFixture.host.navigations.map((entry) => ({
+          mode: entry.mode,
+          address: entry.address,
+        })),
+      ),
+    ).toEqual([{ mode: 'replace', address: '/file/studio/notes/hello.md' }]);
+  }
+});
+
 test('Document paths with a space or a hash round-trip through the address', async ({ page }) => {
   await start(page);
   await page
@@ -703,41 +789,39 @@ test('a failed presentation write reports Storage and still opens the file', asy
   expect(await page.evaluate(() => window.addressFixture.runtime.storageLoss())).toBeNull();
 });
 
+test('a failed presentation write retries the same value and clears Storage when it succeeds', async ({
+  page,
+}) => {
+  await start(page);
+  await remount(page, '/file/studio/notes/hello.md', {
+    writeOnce: 'Injected presentation write failure',
+  });
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Storage' })
+    .click();
+  await expect(page.getByRole('status', { name: 'Storage' })).toContainText(
+    'Presentation State could not be written: Injected presentation write failure',
+  );
+  await page.evaluate(() => window.addressFixture.host.open('/file/studio/notes/hello.md'));
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Storage' })
+    .click();
+  await expect(page.getByRole('status', { name: 'Storage' })).not.toContainText(
+    'Presentation State could not be written',
+  );
+});
+
 test('clearing a live Refusal lands the address that was held while it was live', async ({
   page,
 }) => {
-  await page.goto('/');
-  await page.evaluate(
-    async (rooms) => {
-      const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
-      const helper = '/src/testing.js';
-      const { fixtureRoom, openTestBridge, openTestRuntime } = await import(helper);
-      const specifier = '/src/app.js';
-      const { bindApp } = (await import(specifier)) as {
-        bindApp: (runtime: MdRuntimeClient, bridge: HouseBridge) => Promise<() => void>;
-      };
-      const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) as never });
-      adapter.script('discover', { kind: 'revoked-authorization' });
-      const opened = await openTestRuntime(adapter, {
-        requiredGuarantees: [],
-        discoveryIntervalMs: 60_000,
-      });
-      const { host, bridge } = openTestBridge('/file/studio/notes/hello.md');
-      const unbind = await bindApp(opened.runtime, bridge);
-      window.addressFixture = {
-        runtime: opened.runtime,
-        runtimeHost: opened.host,
-        adapter,
-        host,
-        bridge,
-        shell: opened.shell,
-        stop: opened.stop,
-        unbind,
-        seen: [],
-      };
-    },
-    [studio],
-  );
+  await start(page, {
+    address: '/file/studio/notes/hello.md',
+    discover: { kind: 'revoked-authorization' },
+  });
   await expect(page.getByRole('heading', { level: 1, name: 'Refusal' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeHidden();
   await page.evaluate(() => {
