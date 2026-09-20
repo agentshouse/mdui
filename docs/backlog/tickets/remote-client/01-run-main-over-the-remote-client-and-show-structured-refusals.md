@@ -1,6 +1,6 @@
 # 01-run-main-over-the-remote-client-and-show-structured-refusals - Run main over the remote client of the Provider's Runtime host and show every Provider refusal as its structured code and fields
 
-Status: blocked
+Status: ready-for-agent
 
 ## Frame
 
