@@ -291,7 +291,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   }
 
   async function writePresentation(): Promise<void> {
-    if (!addressed(current) || unresolved !== null) return;
+    if (!addressed(current) || unresolved !== null || presentationReadFault !== null) return;
     const value =
       openRoom !== undefined && openPath !== undefined
         ? { screen: current, room: openRoom, path: openPath }

@@ -174,6 +174,7 @@ async function remount(
   address: string,
   options: {
     read?: string;
+    readOnce?: string;
     write?: string;
     writeOnce?: string;
     duringRead?: string;
@@ -197,10 +198,12 @@ async function remount(
       const connected = connectMdRuntime(channel.port2);
       const proxy =
         options.read !== undefined ||
+        options.readOnce !== undefined ||
         options.write !== undefined ||
         options.writeOnce !== undefined ||
         options.duringRead !== undefined;
       let readStarted = false;
+      let readOnce = options.readOnce;
       let writeOnce = options.writeOnce;
       const runtime = proxy
         ? new Proxy(connected, {
@@ -209,6 +212,11 @@ async function remount(
                 return {
                   async read() {
                     if (options.read !== undefined) throw new Error(options.read);
+                    if (readOnce !== undefined) {
+                      const reason = readOnce;
+                      readOnce = undefined;
+                      throw new Error(reason);
+                    }
                     const value = await target.presentation.read();
                     if (options.duringRead !== undefined) {
                       readStarted = true;
@@ -771,6 +779,44 @@ test('a failed presentation read reports Storage and does not restore the last s
     'Presentation State could not be read: Injected presentation read failure',
   );
   expect(await page.evaluate(() => window.addressFixture.runtime.storageLoss())).toBeNull();
+});
+
+test('a failed presentation read applies the address without overwriting the unread File', async ({
+  page,
+}) => {
+  await start(page);
+  await page
+    .getByRole('article', { name: 'Studio' })
+    .getByRole('button', { name: 'notes/hello.md' })
+    .click();
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await remount(page, '/', { readOnce: 'Injected presentation read failure' });
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Storage' })
+    .click();
+  await expect(page.getByRole('status', { name: 'Storage' })).toContainText(
+    'Presentation State could not be read: Injected presentation read failure',
+  );
+  await page.evaluate(() => window.addressFixture.host.open('/search'));
+  await expect(page.getByRole('heading', { level: 1, name: 'Search' })).toBeVisible();
+  expect(
+    await page.evaluate(async () => {
+      const runtimeHost = window.addressFixture.runtimeHost;
+      if (runtimeHost === undefined) throw new Error('The Runtime host is missing.');
+      const channel = new MessageChannel();
+      const detach = runtimeHost.attach(channel.port1, 'mdui');
+      const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
+      const other = connectMdRuntime(channel.port2);
+      try {
+        return await other.presentation.read();
+      } finally {
+        detach();
+        channel.port1.close();
+        channel.port2.close();
+      }
+    }),
+  ).toEqual({ screen: 'file', room: 'studio', path: 'notes/hello.md' });
 });
 
 test('a failed presentation write reports Storage and still opens the file', async ({ page }) => {

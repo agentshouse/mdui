@@ -253,8 +253,8 @@ the screen it already shows. The length bound is owned by
 Presentation State is which screen is shown and which file Document View is
 bound to, written through the client's presentation surface and observed so a
 tab with no address below the App path follows it. A failed presentation read
-still starts the App and is shown on Storage; a failed presentation write is
-shown there too.
+still starts the App and is shown on Storage, and does not write over the unread
+store; a failed presentation write is shown there too.
 
 ```js
 import { connectApp } from './index.js';
