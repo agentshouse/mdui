@@ -28,8 +28,8 @@ volume; no host Node installation or browser participates.
 The full gate runs typecheck, format check, house check, the built App lane,
 pure specs, browser specs, and the static lane in that order. The built App
 lane rebuilds `src/` in memory and refuses a committed `app/` that differs, so
-the tree the Provider builds is never behind its source. The browser lane verifies swc
-compilation by loading the source modules it transforms.
+the tree the Provider builds is never behind its source. The browser lane
+verifies swc compilation by loading the source modules it transforms.
 Operator checks such as `docs check` and `backlog check` also run through
 this service: `docker compose run --rm --build check npm run ops -- docs check`.
 
@@ -44,9 +44,11 @@ it protects loads it with no compiled-file dependency; App loading is served
 from committed `app/` as built, under a Content Security Policy that carries
 the renderer's own restrictions: no inline style and no network but the host's
 own origin, so a style the App cannot apply through the Provider fails here.
-Its `script-src` also admits `unsafe-eval`, which the renderer does not,
-because the in-page Runtime host stands in for the Provider's worker and the
-Model's schema compiler lives there rather than in App code. The browser
+Its `script-src` also admits `unsafe-eval` and `unsafe-inline`, which the
+renderer does not, because the runner stands in for the Provider: the in-page
+Runtime host carries the Model's schema compiler, which the Provider runs in
+its worker rather than in App code, and the import map and bridge shim the
+runner injects are the document the Provider composes itself. The browser
 fixture uses `@agentshouse/mdruntime/host` serving
 `@agentshouse/mdruntime/memory` and connects `@agentshouse/mdruntime/client`
 over a message port; component specs from `components/01` onward use that same

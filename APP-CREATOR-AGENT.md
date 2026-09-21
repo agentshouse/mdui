@@ -15,25 +15,25 @@ and no server of its own.
 
 ## Change it, build it, push it
 
-`src/` holds the TypeScript sources. `app/` holds the built App, and it is
-committed: the Provider builds the committed tree with the dependencies
-`package-lock.json` pins, and it runs no build script of yours.
+[`ARCHITECTURE.md`](ARCHITECTURE.md) owns what is built here and how. The loop
+an agent runs is:
 
 1. Change `src/`.
 2. Run `npm run ops -- build`.
 3. Commit `src/`, `app/`, and any dependency change together.
 4. Push to the Provider.
 
-A stale `app/` ships the previous App, so the check lane refuses it. A
+The Provider builds the committed tree and runs no build script of yours, so a
+stale `app/` ships the previous App and the check lane refuses it, and a
 dependency the lockfile does not pin refuses the Provider's build.
 
 ## The manifest
 
-`app.json` names the entry document of the built App and declares the
-external origins the App's code needs, empty by default. The Provider
-enforces exactly that set, so an origin your code fetches from and the
-manifest omits is unreachable. Add an origin when you add the code that needs
-it, and nothing else.
+`app.json`, described in [`ARCHITECTURE.md`](ARCHITECTURE.md), declares the
+external origins the App's code needs, empty by default. The Provider enforces
+exactly that set, so an origin your code fetches from and the manifest omits is
+unreachable. Add an origin when you add the code that needs it, and nothing
+else.
 
 ## The MD Runtime API
 
@@ -74,8 +74,9 @@ rejection. The MD Runtime never combines, reorders, or rebases.
 ## The neutrality rule
 
 No module outside an Adapter package imports, names, or special-cases a
-Provider. This repository reaches data only through the client entry, and
-`npm run ops -- check static` refuses an import that breaks the rule.
+Provider. This repository reaches data only through the client entry, and the
+static lane in [`docs/agents/TESTING.md`](docs/agents/TESTING.md) refuses an
+import that breaks the rule.
 
 ## Content-safety rules
 
@@ -89,9 +90,11 @@ only from origins the Provider's policy allows.
 
 ## Launch promises main keeps
 
-The main branch of MD UI uses semantic HTML, is fully operable from a keyboard
-with visible focus and labelled controls, and lays out from a 360 pixel wide
-viewport to a desktop. Its strings are English only, dates and numbers follow
+These are product requirements, owned by the requirement ledger in
+`agentshouse/mdruntime` (R029, R034, R035). The main branch of MD UI keeps
+them: it uses semantic HTML, is fully operable from a keyboard with visible
+focus and labelled controls, and lays out from a 360 pixel wide viewport to a
+desktop. Its strings are English only, dates and numbers follow
 the browser locale, and content is never translated. Light and dark themes
 come from the CSS custom properties in `src/components/theme.ts`, with the
 browser's preference as the default and an App's override respected. Reading

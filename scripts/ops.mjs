@@ -25,6 +25,7 @@ const commands = {
       '.oxfmtrc.json',
       'compose.yaml',
       'AGENTS.md',
+      'APP-CREATOR-AGENT.md',
       'ARCHITECTURE.md',
       'docs/agents/TESTING.md',
     ],

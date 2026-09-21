@@ -63,10 +63,11 @@ instead of being invented during implementation.
 - Temporary command inputs such as PR bodies and review briefs live under the
   owning worktree's `tmp/`, never a generic host-wide `/tmp` path.
 - The App is plain HTML and TypeScript ES modules in `src/`, without a
-  framework. Relative module imports use `.js` specifiers. `app/` is the built
-  App the Provider builds and serves, committed and written by
-  `npm run ops -- build`; change `src/`, rebuild, and commit both. TypeScript checks
-  types, swc compiles, Vitest runs pure and static specs, oxfmt formats, and
+  framework. Relative module imports use `.js` specifiers. `app/` is the
+  built App the Provider builds and serves, committed and written by
+  `npm run ops -- build`; change `src/`, rebuild, and commit both.
+  TypeScript checks types, swc compiles, Vitest runs pure and static specs,
+  oxfmt formats, and
   dependency-cruiser enforces neutrality. Playwright runs browser specs in
   Chromium over the published MD Runtime's in-memory Adapter.
 - Node, npm, and dependency versions are pinned in `package.json` and
