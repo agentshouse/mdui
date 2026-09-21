@@ -3,6 +3,9 @@ name: h-audit
 description: Run one fresh read-only audit through the audit role, either of a published ticket set (`tickets`) or of requirement consistency after a decision changed (`requirements`).
 ---
 
+<!-- house: vendored from agentshouse/house — md/skills/h-audit/SKILL.md (channel md).
+Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`. -->
+
 # Audit
 
 Invoke as `/h-audit tickets` or `/h-audit requirements [R-items...]`. Each

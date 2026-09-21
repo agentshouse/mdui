@@ -3,6 +3,9 @@ name: h-tdd
 description: 'Apply this repository test policy as a red-green vertical-slice loop with no confirmation round.'
 ---
 
+<!-- house: vendored from agentshouse/house — skills/h-tdd/SKILL.md (channel base).
+Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`. -->
+
 # Test-Driven Development
 
 Read `docs/agents/TESTING.md` and execute its slice loop for each ticket

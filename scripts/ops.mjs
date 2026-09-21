@@ -28,6 +28,8 @@ const commands = {
     ],
   },
   'docs check': node('scripts/docs-check.mjs'),
+  'house check': node('scripts/house-baseline.mjs', 'check'),
+  'house sync': node('scripts/house-baseline.mjs', 'sync'),
   'backlog frontier': node('scripts/backlog-frontier.mjs'),
   'backlog sync': node('scripts/backlog-sync.mjs'),
   'backlog check': node('scripts/backlog-sync.mjs', '--check'),

@@ -3,6 +3,9 @@ name: h-to-spec
 description: Turn a settled conversation into this repository's PRD under docs/prd/ with no interview; publication is acceptance.
 ---
 
+<!-- house: vendored from agentshouse/house — md/skills/h-to-spec/SKILL.md (channel md).
+Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`. -->
+
 # To Spec
 
 1. Invoke this skill only when the feature is settled enough to specify. Do not

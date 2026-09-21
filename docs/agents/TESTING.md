@@ -24,9 +24,9 @@ volume; no host Node installation or browser participates.
 | Typecheck or format check | `docker compose run --rm --build check npm run ops -- check <typecheck\|format>`                             |
 | Apply formatting          | `docker compose run --rm --build check npm run ops -- format`                                                |
 
-The full gate runs typecheck, format check, pure specs, browser specs, and
-the static lane in that order. The browser lane verifies swc compilation
-by loading the source modules it transforms.
+The full gate runs typecheck, format check, house check, pure specs, browser
+specs, and the static lane in that order. The browser lane verifies swc
+compilation by loading the source modules it transforms.
 Operator checks such as `docs check` and `backlog check` also run through
 this service: `docker compose run --rm --build check npm run ops -- docs check`.
 

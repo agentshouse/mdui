@@ -1,3 +1,6 @@
+<!-- house: vendored from agentshouse/house — skills/tdd/tests.md (channel base).
+Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`. -->
+
 # Good and Bad Tests
 
 ## Good Tests

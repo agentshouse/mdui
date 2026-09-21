@@ -3,6 +3,9 @@ name: h-code-review
 description: Review one repository delivery through the standards and spec roles, classify every finding, and run up to residualRounds fresh residual reviews.
 ---
 
+<!-- house: vendored from agentshouse/house — md/skills/h-code-review/SKILL.md (channel md).
+Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`. -->
+
 # Code review
 
 Reviewers are fresh, read-only, and launched through `agent-run start --role`;

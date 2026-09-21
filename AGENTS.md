@@ -86,12 +86,9 @@ use the same interface.
    `npm run ops -- merge <number>` squash-merges; the implementer never runs it.
 3. For every test decision, follow `docs/agents/TESTING.md`. The implementer
    runs those tests. Merge does not.
-4. A package release is agent work, exactly like a merge. After the merge
-   that owes a release, the Master starts a release agent that runs the
-   repository's `docs/releases/` handoff end to end: the gate, the publish
-   workflow dispatch and the registry readback. Nobody stops for the User's
-   confirmation; only the User consumes these packages today. Changing a
-   repository's visibility is not a release.
+
+This repository publishes no package. There is no release step after a merge,
+and no merge here ever owes one.
 
 ## Commands and infrastructure
 
@@ -104,12 +101,13 @@ check runs in that Compose service.
 
 ## Skills and tracker
 
-- `.agents/skills/{code-review,implement,tdd,to-spec,to-tickets}` are committed
-  repository-local snapshots of the upstream personal skills. They are
-  explicit-only baselines; their `h-*` neighbors are maintained repository
-  forks. Refresh a baseline deliberately from upstream, then diff each pair and
-  port only applicable behavior while preserving the ticket, validation, and
-  delivery contracts.
+- `.agents/skills/**` and `scripts/house-baseline.mjs` are vendored from
+  `agentshouse/house`; skill files carry a provenance header. The `base` tier
+  holds what every repository in the house shares; the `md` tier holds what
+  this repository shares with its two siblings. Never edit a vendored file
+  here: `npm run ops -- house check` runs in the check lane and refuses the
+  drift by path, expected hash and actual hash. Route the change to `house`,
+  then run `npm run ops -- house sync`.
 - `.claude/skills` is the Claude Code view of the same project skill directory;
   `.agents/skills` remains the source of truth.
 - Shaping, `/grill-with-docs -> /h-to-spec -> /h-to-tickets`, runs in

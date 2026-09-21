@@ -1,3 +1,6 @@
+<!-- house: vendored from agentshouse/house — skills/tdd/mocking.md (channel base).
+Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`. -->
+
 # When to Mock
 
 Mock at **system boundaries** only:

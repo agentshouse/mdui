@@ -1,3 +1,6 @@
+# house: vendored from agentshouse/house — skills/tdd/agents/openai.yaml (channel base).
+# Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`.
+
 interface:
   display_name: "TDD"
   short_description: "Test-driven red-green-refactor"
