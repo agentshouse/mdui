@@ -1,6 +1,6 @@
 # 01-bundle-build-agent-instructions-and-release - Bundle build, agent instructions, and release
 
-Status: blocked
+Status: ready-for-human
 
 ## Frame
 
