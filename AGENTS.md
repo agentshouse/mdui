@@ -59,7 +59,9 @@ instead of being invented during implementation.
   or tests.
 - A folder is a namespace: do not repeat its name in a file name.
 - Tooling lives in `scripts/` and is reachable through `npm run ops`. Derived
-  artifacts live in gitignored `tmp/`.
+  artifacts live in gitignored `tmp/`, except the built App in `app/`, which
+  the Provider builds from the committed tree and which is committed for that
+  reason alone.
 - Temporary command inputs such as PR bodies and review briefs live under the
   owning worktree's `tmp/`, never a generic host-wide `/tmp` path.
 - The App is plain HTML and TypeScript ES modules in `src/`, without a
@@ -67,9 +69,8 @@ instead of being invented during implementation.
   built App the Provider builds and serves, committed and written by
   `npm run ops -- build`; change `src/`, rebuild, and commit both.
   TypeScript checks types, swc compiles, Vitest runs pure and static specs,
-  oxfmt formats, and
-  dependency-cruiser enforces neutrality. Playwright runs browser specs in
-  Chromium over the published MD Runtime's in-memory Adapter.
+  oxfmt formats, and dependency-cruiser enforces neutrality. Playwright runs
+  browser specs in Chromium over the published MD Runtime's in-memory Adapter.
 - Node, npm, and dependency versions are pinned in `package.json` and
   `package-lock.json`. Keep the Node and npm pins aligned with Agents House.
 - Dependencies stay minimal: the MD Runtime, the Adapter, and what they pin.
