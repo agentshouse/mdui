@@ -101,12 +101,13 @@ check runs in that Compose service.
 
 ## Skills and tracker
 
-- `.agents/skills/**` is vendored from `agentshouse/house` and carries a
-  provenance header. The `base` tier holds what every repository in the house
-  shares; the `md` tier holds what this repository shares with its two
-  siblings. Never edit a vendored file here: `npm run ops -- house check` runs
-  in the check lane and refuses the drift by path, expected hash and actual
-  hash. Route the change to `house`, then run `npm run ops -- house sync`.
+- `.agents/skills/**` and `scripts/house-baseline.mjs` are vendored from
+  `agentshouse/house`; skill files carry a provenance header. The `base` tier
+  holds what every repository in the house shares; the `md` tier holds what
+  this repository shares with its two siblings. Never edit a vendored file
+  here: `npm run ops -- house check` runs in the check lane and refuses the
+  drift by path, expected hash and actual hash. Route the change to `house`,
+  then run `npm run ops -- house sync`.
 - `.claude/skills` is the Claude Code view of the same project skill directory;
   `.agents/skills` remains the source of truth.
 - Shaping, `/grill-with-docs -> /h-to-spec -> /h-to-tickets`, runs in
