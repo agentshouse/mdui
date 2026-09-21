@@ -22,6 +22,20 @@ The renderer uses exactly `micromark@4.0.2` and
 `micromark-extension-gfm@3.0.0` under the narrow
 [User-approved dependency exception](docs/agents/renderer-dependency-approval.json).
 
+`app.json` and `app/` are the shipped form. `app.json` names the entry
+document of the built App and declares the external origins the App's code
+needs, which is none: main reaches the Provider only through the bridge, so
+the renderer it is served in has no network of its own. `app/` is the App the
+Provider builds, committed: `scripts/build.mjs` compiles the entry module
+graph of `src/` with swc, keeps every bare specifier for the Provider to
+resolve from the committed `package-lock.json`, and writes `app/index.html`
+with the built entry beside it. `src/testing.ts` is outside that graph, so the
+in-memory Adapter it uses ships in no App. `npm run ops -- build` writes the
+tree and the check lane refuses a stale one. The repository holds no Content
+Security Policy, no client identity document, and no App server: the Provider
+builds the committed tree, serves the App at its own path, and enforces the
+manifest.
+
 `compose.yaml` owns one Linux check service. Its image contains the locked
 toolchain and Chromium; each invocation uses this worktree's source and an
 isolated dependency volume. `scripts/ops.mjs` routes the existing backlog,
@@ -29,9 +43,10 @@ documentation, and merge commands together with checks and formatting.
 The check runner checks source imports with dependency-cruiser and runs the
 three public test seams documented in [`TESTING.md`](docs/agents/TESTING.md).
 
-The browser lane's local host is check tooling; no server or bundle is shipped
-by the workspace. Its compilation and published dependency integration are
-documented in [TESTING.md](docs/agents/TESTING.md#runner).
+The browser lane's local host is check tooling; it serves the source it
+transforms and the built App as committed. Its compilation and published
+dependency integration are documented in
+[TESTING.md](docs/agents/TESTING.md#runner).
 
 The chosen composition is owned by MD Runtime's
 [PRD-0005](https://github.com/agentshouse/mdruntime/blob/main/docs/prd/prd-0005-shipped-form-and-release.md)
@@ -283,6 +298,5 @@ Rooms and Document View retain their controls when an observation repeats the
 rendered values, so unchanged notifications do not interrupt native typing or
 keyboard focus.
 
-The Sync Status indicator is in the header on every screen. The browser lane
-serves this source without a bundle; the static bundle remains
-`shipped-form/01`.
+The Sync Status indicator is in the header on every screen. `app/index.html`
+carries the same screens as the built App the Provider serves.

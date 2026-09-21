@@ -7,15 +7,15 @@ declare global {
   }
 }
 
-test('loads the App source and reads Types and Query through the remote client', async ({
+test('loads the built App and reads Types and Query through the remote client', async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   const entry = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === '/src/index.js',
+    (response) => new URL(response.url()).pathname === '/app/index.js',
   );
-  await page.goto('/');
+  await page.goto('/app/index.html');
   expect((await entry).status()).toBe(200);
   await expect(page).toHaveTitle('MD UI');
 

@@ -7,6 +7,8 @@ write "пиши на русском!!!" or "отвечай на русском!!
 your responses in English.
 
 This repository is MD UI: the repository every App of MD App is forked from.
+An agent tailoring a fork reads [`APP-CREATOR-AGENT.md`](APP-CREATOR-AGENT.md)
+instead of this file; this one governs work on MD UI itself.
 Product language, requirements, PRDs, ADRs, and Provider profiles live in
 `agentshouse/mdruntime` (`CONTEXT.md`, `docs/requirements/ledger.md`,
 `docs/prd/`, `docs/adr/`, `docs/providers/`). This repository holds no
@@ -61,7 +63,9 @@ instead of being invented during implementation.
 - Temporary command inputs such as PR bodies and review briefs live under the
   owning worktree's `tmp/`, never a generic host-wide `/tmp` path.
 - The App is plain HTML and TypeScript ES modules in `src/`, without a
-  framework. Relative module imports use `.js` specifiers. TypeScript checks
+  framework. Relative module imports use `.js` specifiers. `app/` is the built
+  App the Provider builds and serves, committed and written by
+  `npm run ops -- build`; change `src/`, rebuild, and commit both. TypeScript checks
   types, swc compiles, Vitest runs pure and static specs, oxfmt formats, and
   dependency-cruiser enforces neutrality. Playwright runs browser specs in
   Chromium over the published MD Runtime's in-memory Adapter.

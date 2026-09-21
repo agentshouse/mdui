@@ -21,11 +21,14 @@ volume; no host Node installation or browser participates.
 | Pure slice                | `docker compose run --rm --build check npm run ops -- check pure test/pure/<name>.spec.ts [-t <name>]`       |
 | Browser slice             | `docker compose run --rm --build check npm run ops -- check browser test/browser/<name>.spec.ts [-g <name>]` |
 | Static lane               | `docker compose run --rm --build check npm run ops -- check static`                                          |
+| Built App lane            | `docker compose run --rm --build check npm run ops -- check build`                                           |
 | Typecheck or format check | `docker compose run --rm --build check npm run ops -- check <typecheck\|format>`                             |
 | Apply formatting          | `docker compose run --rm --build check npm run ops -- format`                                                |
 
-The full gate runs typecheck, format check, house check, pure specs, browser
-specs, and the static lane in that order. The browser lane verifies swc
+The full gate runs typecheck, format check, house check, the built App lane,
+pure specs, browser specs, and the static lane in that order. The built App
+lane rebuilds `src/` in memory and refuses a committed `app/` that differs, so
+the tree the Provider builds is never behind its source. The browser lane verifies swc
 compilation by loading the source modules it transforms.
 Operator checks such as `docs check` and `backlog check` also run through
 this service: `docker compose run --rm --build check npm run ops -- docs check`.
@@ -113,6 +116,8 @@ Tests live at public seams, never against internals, and use `.spec.ts`:
 | `test/browser/` | Playwright: the App's DOM and its public MD Runtime integration                  |
 | `test/static/`  | Vitest `static` project: the dependency-cruiser command's acceptance and refusal |
 
+App loading is observed on the committed `app/`, which is the App the Provider
+builds; every other browser specification mounts the source it protects.
 The browser specifications own App loading, the Markdown renderer, field
 controls, Document View, the Sync Status indicator, and the seven screens of
 main over the published in-memory Adapter. They exercise actual native
@@ -157,7 +162,12 @@ being typed into; the field keeps its value and focus until the user commits it.
 The renderer seam also
 accepts adversarial text directly through its public property, independently
 of Model collection validity; normal section input is read through Query.
-The pure lane owns `test/pure/address.spec.ts` and the renderer corpus.
+The pure lane owns `test/pure/address.spec.ts`, `test/pure/app.spec.ts`, and
+the renderer corpus. `test/pure/app.spec.ts` owns the shipped form as the
+Provider reads it: the manifest's entry and its empty external origins, the
+entry document's single reference, the built App's own module set without the
+test placement, bare specifiers the committed lockfile pins, and the absence
+of any network primitive of the App's own.
 `test/pure/address.spec.ts` asserts `splitAddress` and `parseAddress` on the
 remainder grammar, including production-delivered `//` and `scheme:` forms,
 `/\notes` whose `\` the browser would already have folded to `/`, empty or `/`

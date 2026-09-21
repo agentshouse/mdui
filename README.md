@@ -6,7 +6,10 @@ carries more and rebases on main.
 
 Private development repository until release.
 
-- Agent instructions: [`AGENTS.md`](AGENTS.md)
+- Instructions for the App Creator's agent:
+  [`APP-CREATOR-AGENT.md`](APP-CREATOR-AGENT.md)
+- Agent instructions for this repository: [`AGENTS.md`](AGENTS.md)
 - Documentation map: [`docs/README.md`](docs/README.md)
 - Glossary, requirements, PRDs, and ADRs: `agentshouse/mdruntime`
 - Operator interface: `npm run ops`
+- License: [MIT](LICENSE)

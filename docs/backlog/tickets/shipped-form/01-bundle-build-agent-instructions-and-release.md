@@ -1,6 +1,6 @@
 # 01-bundle-build-agent-instructions-and-release - Bundle build, agent instructions, and release
 
-Status: blocked
+Status: resolved
 
 ## Frame
 
@@ -30,13 +30,13 @@ Creator would.
 
 ## Acceptance criteria
 
-- [ ] Building main from its committed tree and locked dependencies yields
+- [x] Building main from its committed tree and locked dependencies yields
       the App the Provider serves, with the external origins its code needs
       declared in the manifest and nothing else declared; there is no MD App
       server.
-- [ ] The repository root carries the agent instruction file with the listed
+- [x] The repository root carries the agent instruction file with the listed
       content and the MIT license file.
-- [ ] The neutrality lane is green on main, and the bundle sends no
+- [x] The neutrality lane is green on main, and the bundle sends no
       telemetry.
 - [ ] Main, built by House from its committed tree and served at its own
       path on the control origin, runs over the host's Runtime under the App

@@ -7,6 +7,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const node = (script, ...args) => ({ command: process.execPath, args: [script, ...args] });
 
 const commands = {
+  build: node('scripts/build.mjs'),
   check: node('scripts/check.mjs'),
   format: {
     command: 'node_modules/.bin/oxfmt',
@@ -14,6 +15,7 @@ const commands = {
       'src/**/*.{ts,html}',
       'test/**/*.ts',
       'scripts/ops.mjs',
+      'scripts/build.mjs',
       'scripts/check.mjs',
       'scripts/host.mjs',
       '*.config.ts',
