@@ -12,6 +12,10 @@ test('loads the built App and reads Types and Query through the remote client', 
 }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  const refused: string[] = [];
+  page.on('console', (message) => {
+    if (message.text().includes('Content Security Policy')) refused.push(message.text());
+  });
   const entry = page.waitForResponse(
     (response) => new URL(response.url()).pathname === '/app/index.js',
   );
@@ -69,12 +73,17 @@ test('loads the built App and reads Types and Query through the remote client', 
         types: types.collection.status === 'unavailable' ? [] : types.collection.types,
         query: await runtime.query({ selector: { room: 'fixture', type: 'note' } }),
         bound: document.getElementById('app') !== null,
+        appPadding: getComputedStyle(document.getElementById('app')!).padding,
+        statusDisplay: getComputedStyle(document.querySelector('md-sync-status')!).display,
       };
     } finally {
       controller.abort();
     }
   });
   expect(visible.bound).toBe(true);
+  expect(visible.appPadding).toBe('12px');
+  expect(visible.statusDisplay).toBe('block');
+  expect(refused).toEqual([]);
   expect(visible.types).toEqual([
     {
       name: 'note',

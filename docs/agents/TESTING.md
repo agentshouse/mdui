@@ -39,13 +39,19 @@ Vitest, bundles the installed dependencies' public
 root exports and the public Runtime memory entry with their pinned dependency
 graph into browser ES modules in memory, including the locked micromark
 utility roots used by the renderer's syntax extensions;
-the import map resolves those entries. Playwright loads the App source
-directly with no compiled-file dependency. The browser fixture uses
-`@agentshouse/mdruntime/host` serving `@agentshouse/mdruntime/memory` and
-connects `@agentshouse/mdruntime/client` over a message port; component specs
-from `components/01` onward use that same public in-memory Adapter in the test
-placement. It belongs only to tests and is excluded from the eventual bundle
-by PRD-0005 in `agentshouse/mdruntime`.
+the import map resolves those entries. A specification that mounts the source
+it protects loads it with no compiled-file dependency; App loading is served
+from committed `app/` as built, under a Content Security Policy that carries
+the renderer's own restrictions: no inline style and no network but the host's
+own origin, so a style the App cannot apply through the Provider fails here.
+Its `script-src` also admits `unsafe-eval`, which the renderer does not,
+because the in-page Runtime host stands in for the Provider's worker and the
+Model's schema compiler lives there rather than in App code. The browser
+fixture uses `@agentshouse/mdruntime/host` serving
+`@agentshouse/mdruntime/memory` and connects `@agentshouse/mdruntime/client`
+over a message port; component specs from `components/01` onward use that same
+public in-memory Adapter in the test placement. It belongs only to tests and
+ships in no App, by PRD-0005 in `agentshouse/mdruntime`.
 
 The static lane runs dependency-cruiser over `src/` and a specification that
 plants runtime and type-only Provider-specific imports outside the Adapter

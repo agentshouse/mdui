@@ -9,7 +9,7 @@ import type {
 } from '@agentshouse/mdruntime';
 import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import { addressed, composeAddress, fileSuffix, parseAddress, type Addressed } from './address.js';
-import { appStyles } from './components/theme.js';
+import { adopt, appStyles } from './components/theme.js';
 import { mdTypes, observation, queueKinds, refusalParts } from './components/runtime.js';
 import './components/status.js';
 import './components/view.js';
@@ -188,9 +188,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   const root = fragment.querySelector('#app');
   if (!(root instanceof HTMLElement)) throw new TypeError('The App root is missing.');
   const app: HTMLElement = root;
-  const style = document.createElement('style');
-  style.textContent = appStyles;
-  app.prepend(style);
+  adopt(document, appStyles);
   document.body.append(fragment);
 
   const status = app.querySelector('md-sync-status') as StatusElement;

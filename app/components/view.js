@@ -2,7 +2,7 @@ import { internalPath, relativePath } from './links.js';
 import { mdTypes, observation, refusalParts } from './runtime.js';
 import './fields.js';
 import './markdown.js';
-import { viewStyles } from './theme.js';
+import { adopt, viewStyles } from './theme.js';
 const ROOM_ROOT = 'room';
 function roomPrefix(value) {
     const resolved = internalPath(value, ROOM_ROOT);
@@ -441,8 +441,7 @@ export class DocumentView extends HTMLElement {
             this.editor = undefined;
             void this.keepDraft(draftEmpty(next) ? null : next);
         }
-        const style = document.createElement('style');
-        style.textContent = viewStyles;
+        adopt(this.root, viewStyles);
         const heading = document.createElement('h1');
         const path = this.filePath();
         heading.textContent = this.getAttribute('label') ?? path;
@@ -454,7 +453,7 @@ export class DocumentView extends HTMLElement {
         if (this.writable()) body.append(this.documentControls());
         if (this.current !== undefined && this.runtime !== undefined) this.renderDocument(body, this.current);
         else if (this.draft?.create !== undefined && this.runtime !== undefined) this.renderCreation(body);
-        this.root.replaceChildren(style, heading, reason, body);
+        this.root.replaceChildren(heading, reason, body);
     }
     documentControls() {
         const panel = document.createElement('div');

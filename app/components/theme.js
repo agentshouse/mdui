@@ -1,3 +1,18 @@
+const sheets = new Map();
+export function adopt(root, styles) {
+    let sheet = sheets.get(styles);
+    if (sheet === undefined) {
+        sheet = new CSSStyleSheet();
+        sheet.replaceSync(styles);
+        sheets.set(styles, sheet);
+    }
+    if (!root.adoptedStyleSheets.includes(sheet)) {
+        root.adoptedStyleSheets = [
+            ...root.adoptedStyleSheets,
+            sheet
+        ];
+    }
+}
 export const fieldStyles = `
   :host {
     display: block;

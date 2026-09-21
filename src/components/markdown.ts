@@ -1,6 +1,6 @@
 import { renderMarkdown, type ResourceReference } from './html.js';
 import { connectLinks } from './links.js';
-import { markdownStyles } from './theme.js';
+import { adopt, markdownStyles } from './theme.js';
 
 export class MarkdownRenderer extends HTMLElement {
   static observedAttributes = ['text', 'label', 'room', 'path'];
@@ -52,9 +52,8 @@ export class MarkdownRenderer extends HTMLElement {
       ),
     );
     this.references = resources;
-    const style = document.createElement('style');
-    style.textContent = markdownStyles;
-    this.root.replaceChildren(style, article);
+    adopt(this.root, markdownStyles);
+    this.root.replaceChildren(article);
     for (const reference of this.resources)
       this.dispatchEvent(
         new CustomEvent('resource-reference', {

@@ -1,6 +1,6 @@
 import type { QueryOptions } from '@agentshouse/mdruntime';
 import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
-import { fieldStyles } from './theme.js';
+import { adopt, fieldStyles } from './theme.js';
 import { mdTypes, observation } from './runtime.js';
 
 export type FieldDefinition = {
@@ -114,8 +114,7 @@ abstract class ScalarField extends FieldControl {
   }
 
   protected render(): void {
-    const style = document.createElement('style');
-    style.textContent = fieldStyles;
+    adopt(this.root, fieldStyles);
     this.control = this.createControl();
     this.control.id = 'value';
     this.control.lang = navigator.language;
@@ -133,7 +132,7 @@ abstract class ScalarField extends FieldControl {
       this.emitChange();
     });
     this.formatted.setAttribute('aria-live', 'polite');
-    this.root.replaceChildren(style, this.caption, this.control, this.formatted, this.message);
+    this.root.replaceChildren(this.caption, this.control, this.formatted, this.message);
     this.attributeChangedCallback();
     this.writeValue();
     this.presentValidity();
@@ -297,8 +296,7 @@ export class ListField extends FieldControl {
   }
 
   protected render(): void {
-    const style = document.createElement('style');
-    style.textContent = fieldStyles;
+    adopt(this.root, fieldStyles);
     this.message.className = 'error';
     this.message.id = 'message';
     this.message.setAttribute('role', 'status');
@@ -315,7 +313,7 @@ export class ListField extends FieldControl {
       this.items.at(-1)!.focus();
       this.emitChange();
     };
-    this.root.replaceChildren(style, this.group, this.message);
+    this.root.replaceChildren(this.group, this.message);
     this.writeValue();
     this.presentValidity();
   }

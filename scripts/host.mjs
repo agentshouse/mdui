@@ -55,6 +55,15 @@ const documents = new Map([
   ['src/index.html', '<script type="module" src="/src/index.js"></script>'],
   ['app/index.html', '<script type="module" src="index.js"></script>'],
 ]);
+const appPolicy = [
+  "default-src 'none'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'none'",
+  'img-src data: blob:',
+  'media-src data: blob:',
+  'font-src data: blob:',
+  "connect-src 'self'",
+].join('; ');
 
 const server = createServer(async (request, response) => {
   try {
@@ -81,6 +90,7 @@ const server = createServer(async (request, response) => {
     }
     response.writeHead(200, {
       'content-type': types.get(extname(path)) ?? 'application/octet-stream',
+      ...(name === 'app/index.html' ? { 'content-security-policy': appPolicy } : {}),
     });
     response.end(body);
   } catch (error) {

@@ -1,4 +1,4 @@
-import { fieldStyles } from './theme.js';
+import { adopt, fieldStyles } from './theme.js';
 import { mdTypes, observation } from './runtime.js';
 const configure = Symbol('configure');
 export class FieldControl extends HTMLElement {
@@ -80,8 +80,7 @@ class ScalarField extends FieldControl {
         if (this.control) this.control.disabled = this.hasAttribute('disabled');
     }
     render() {
-        const style = document.createElement('style');
-        style.textContent = fieldStyles;
+        adopt(this.root, fieldStyles);
         this.control = this.createControl();
         this.control.id = 'value';
         this.control.lang = navigator.language;
@@ -99,7 +98,7 @@ class ScalarField extends FieldControl {
             this.emitChange();
         });
         this.formatted.setAttribute('aria-live', 'polite');
-        this.root.replaceChildren(style, this.caption, this.control, this.formatted, this.message);
+        this.root.replaceChildren(this.caption, this.control, this.formatted, this.message);
         this.attributeChangedCallback();
         this.writeValue();
         this.presentValidity();
@@ -241,8 +240,7 @@ export class ListField extends FieldControl {
         }
     }
     render() {
-        const style = document.createElement('style');
-        style.textContent = fieldStyles;
+        adopt(this.root, fieldStyles);
         this.message.className = 'error';
         this.message.id = 'message';
         this.message.setAttribute('role', 'status');
@@ -259,7 +257,7 @@ export class ListField extends FieldControl {
             this.items.at(-1).focus();
             this.emitChange();
         };
-        this.root.replaceChildren(style, this.group, this.message);
+        this.root.replaceChildren(this.group, this.message);
         this.writeValue();
         this.presentValidity();
     }

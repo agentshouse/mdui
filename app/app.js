@@ -1,5 +1,5 @@
 import { addressed, composeAddress, fileSuffix, parseAddress } from './address.js';
-import { appStyles } from './components/theme.js';
+import { adopt, appStyles } from './components/theme.js';
 import { mdTypes, observation, queueKinds, refusalParts } from './components/runtime.js';
 import './components/status.js';
 import './components/view.js';
@@ -165,9 +165,7 @@ export async function bindApp(runtime, bridge) {
     const root = fragment.querySelector('#app');
     if (!(root instanceof HTMLElement)) throw new TypeError('The App root is missing.');
     const app = root;
-    const style = document.createElement('style');
-    style.textContent = appStyles;
-    app.prepend(style);
+    adopt(document, appStyles);
     document.body.append(fragment);
     const status = app.querySelector('md-sync-status');
     const view = app.querySelector('md-document-view');
