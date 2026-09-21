@@ -1,3 +1,17 @@
+const sheets = new Map<string, CSSStyleSheet>();
+
+export function adopt(root: Document | ShadowRoot, styles: string): void {
+  let sheet = sheets.get(styles);
+  if (sheet === undefined) {
+    sheet = new CSSStyleSheet();
+    sheet.replaceSync(styles);
+    sheets.set(styles, sheet);
+  }
+  if (!root.adoptedStyleSheets.includes(sheet)) {
+    root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+  }
+}
+
 export const fieldStyles = `
   :host {
     display: block;

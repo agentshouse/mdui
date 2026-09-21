@@ -49,6 +49,22 @@ const types = new Map([
   ['.json', 'application/json; charset=utf-8'],
 ]);
 
+const bridge =
+  '<script>globalThis.houseBridge ??= new Promise((resolve) => { globalThis.houseBridgeComplete = resolve; });</script>';
+const documents = new Map([
+  ['src/index.html', '<script type="module" src="/src/index.js"></script>'],
+  ['app/index.html', '<script type="module" src="index.js"></script>'],
+]);
+const appPolicy = [
+  "default-src 'none'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'none'",
+  'img-src data: blob:',
+  'media-src data: blob:',
+  'font-src data: blob:',
+  "connect-src 'self'",
+].join('; ');
+
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, 'http://127.0.0.1:4173');
@@ -59,23 +75,22 @@ const server = createServer(async (request, response) => {
     }
     let path = resolve(root, `.${pathname}`);
     const name = relative(root, path);
-    if (!name.startsWith('src/')) {
+    if (!name.startsWith('src/') && !name.startsWith('app/')) {
       response.writeHead(404).end();
       return;
     }
     if (name.startsWith('src/') && extname(path) === '.js') path = path.slice(0, -3) + '.ts';
     let body = extname(path) === '.ts' ? (await transformFile(path)).code : await readFile(path);
-    if (name === 'src/index.html') {
+    const script = documents.get(name);
+    if (script !== undefined) {
       body = body
         .toString()
         .replace('<head>', `<head>\n${importMap}`)
-        .replace(
-          '<script type="module" src="/src/index.js"></script>',
-          '<script>globalThis.houseBridge ??= new Promise((resolve) => { globalThis.houseBridgeComplete = resolve; });</script>\n<script type="module" src="/src/index.js"></script>',
-        );
+        .replace(script, `${bridge}\n${script}`);
     }
     response.writeHead(200, {
       'content-type': types.get(extname(path)) ?? 'application/octet-stream',
+      ...(name === 'app/index.html' ? { 'content-security-policy': appPolicy } : {}),
     });
     response.end(body);
   } catch (error) {

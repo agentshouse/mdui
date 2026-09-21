@@ -15,6 +15,7 @@ built state, and its own workflow documents.
 | Feature scope, behavior, invariants, and gates | `agentshouse/mdruntime` `docs/prd/` |
 | One Provider's fit with the Room Contract | `agentshouse/mdruntime` `docs/providers/` |
 | Built state | `ARCHITECTURE.md` |
+| What an agent tailoring a fork must know and must never do | `APP-CREATOR-AGENT.md` |
 | Ticket state, body shape, dependency semantics, and publication boundary | `docs/agents/issue-tracker.md` |
 | Audit scopes, checks, and finding output | `.agents/skills/h-audit/SKILL.md` |
 | Machine-readable statuses, Ownerships, Delivery Tracks, and authored edges | `docs/backlog/backlog.config.json` |

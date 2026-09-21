@@ -2,7 +2,7 @@
   "name": "mdui",
   "private": true,
   "description": "MD UI: the repository every App of MD App is forked from",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "ops": "node -- scripts/ops.mjs"

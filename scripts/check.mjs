@@ -4,6 +4,7 @@ const commands = {
   typecheck: [['tsc', '--noEmit']],
   format: [['npm', 'run', 'ops', '--', 'format', '--check']],
   house: [['node', 'scripts/house-baseline.mjs', 'check']],
+  build: [['node', 'scripts/build.mjs', '--check']],
   pure: [['vitest', 'run', '--project', 'pure']],
   browser: [['playwright', 'test']],
   static: [

@@ -1,7 +1,7 @@
 import type { SyncStatus } from '@agentshouse/mdruntime';
 import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import { observation, queueKinds, refusalParts } from './runtime.js';
-import { statusStyles } from './theme.js';
+import { adopt, statusStyles } from './theme.js';
 
 const states = {
   pending: 'Pending',
@@ -38,8 +38,7 @@ export class SyncStatusIndicator extends HTMLElement {
   }
 
   private present(status: SyncStatus): void {
-    const style = document.createElement('style');
-    style.textContent = statusStyles;
+    adopt(this.root, statusStyles);
     const region = document.createElement('div');
     region.setAttribute('role', 'status');
     region.setAttribute('aria-label', 'Sync Status');
@@ -82,7 +81,7 @@ export class SyncStatusIndicator extends HTMLElement {
       pending.textContent = 'Changes remain Pending';
       region.append(pending);
     }
-    this.root.replaceChildren(style, region);
+    this.root.replaceChildren(region);
   }
 }
 
