@@ -18,6 +18,7 @@ const commands = {
       'scripts/build.mjs',
       'scripts/check.mjs',
       'scripts/host.mjs',
+      'scripts/container-user.mjs',
       '*.config.ts',
       'package.json',
       'tsconfig.json',

@@ -13,7 +13,11 @@ Every check runs in the Linux Docker Compose `check` service with the Node,
 npm, and dependency pins in `package.json` and `package-lock.json`. The image
 installs from the lockfile and includes Playwright's Chromium and system
 dependencies. Each run mounts this worktree and gets its own dependency
-volume; no host Node installation or browser participates.
+volume; no host Node installation or browser participates. The entrypoint,
+`scripts/container-user.mjs`, hands that volume and the mount point Docker
+creates for it in the worktree, reached through the second mount at
+`/checkout`, to the checkout owner's UID/GID, then runs the command as that
+owner, so everything a run writes stays removable by the owner.
 
 | Decision                  | Command                                                                                                      |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------ |

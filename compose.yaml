@@ -3,6 +3,7 @@ services:
     build: .
     working_dir: /workspace
     init: true
+    entrypoint: ['node', 'scripts/container-user.mjs']
     shm_size: 2gb
     environment:
       CI: '1'
@@ -11,4 +12,5 @@ services:
     volumes:
       - .:/workspace
       - /workspace/node_modules
+      - .:/checkout
     command: npm run ops -- check

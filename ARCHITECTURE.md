@@ -38,7 +38,7 @@ manifest.
 
 `compose.yaml` owns one Linux check service. Its image contains the locked
 toolchain and Chromium; each invocation uses this worktree's source and an
-isolated dependency volume. `scripts/ops.mjs` routes the existing backlog,
+isolated dependency volume, and runs as the checkout owner. `scripts/ops.mjs` routes the existing backlog,
 documentation, and merge commands together with checks and formatting.
 The check runner checks source imports with dependency-cruiser and runs the
 three public test seams documented in [`TESTING.md`](docs/agents/TESTING.md).
