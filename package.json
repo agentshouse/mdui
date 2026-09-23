@@ -9,8 +9,8 @@
   },
   "dependencies": {
     "@agentshouse/app-bridge": "0.1.0-alpha.1",
-    "@agentshouse/mdruntime": "0.1.0-alpha.12",
-    "@agentshouse/mdruntime-adapter": "0.1.0-alpha.3",
+    "@agentshouse/mdruntime": "0.1.0-alpha.13",
+    "@agentshouse/mdruntime-adapter": "0.1.0-alpha.4",
     "micromark": "4.0.2",
     "micromark-extension-gfm": "3.0.0"
   },
