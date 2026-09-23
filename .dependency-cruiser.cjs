@@ -15,8 +15,7 @@ module.exports = {
       exportsFields: ['exports'],
       conditionNames: ['import', 'default'],
     },
-    parser: 'tsc',
-    tsPreCompilationDeps: true,
+    parser: 'swc',
     combinedDependencies: true,
   },
 };
