@@ -44,11 +44,11 @@ it protects loads it with no compiled-file dependency; App loading is served
 from committed `app/` as built, under a Content Security Policy that carries
 the renderer's own restrictions: no inline style and no network but the host's
 own origin, so a style the App cannot apply through the Provider fails here.
-Its `script-src` also admits `unsafe-eval` and `unsafe-inline`, which the
-renderer does not, because the runner stands in for the Provider: the in-page
-Runtime host carries the Model's schema compiler, which the Provider runs in
-its worker rather than in App code, and the import map and bridge shim the
-runner injects are the document the Provider composes itself. The browser
+Its `script-src` also admits `unsafe-inline`, which the renderer does not,
+because the runner stands in for the Provider: the import map and bridge shim
+the runner injects are the document the Provider composes itself. It admits no
+`unsafe-eval`, so the in-page Runtime host proves the Model it carries
+validates without generating code. The browser
 fixture uses `@agentshouse/mdruntime/host` serving
 `@agentshouse/mdruntime/memory` and connects `@agentshouse/mdruntime/client`
 over a message port; component specs from `components/01` onward use that same
@@ -63,7 +63,7 @@ The spec uses the lane's error reporter to verify both the nonzero exit and
 the named neutrality error.
 Dependency-cruiser uses its TypeScript parser with pre-compilation
 dependencies included. TypeScript is pinned to `6.0.3` because
-dependency-cruiser `18.2.0` requires the compiler API below version 7; Node
+dependency-cruiser `18.4.0` requires the compiler API below version 7; Node
 and npm still use House's current pins.
 
 ## Cadence

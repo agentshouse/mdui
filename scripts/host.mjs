@@ -57,7 +57,7 @@ const documents = new Map([
 ]);
 const appPolicy = [
   "default-src 'none'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline'",
   "style-src 'none'",
   'img-src data: blob:',
   'media-src data: blob:',

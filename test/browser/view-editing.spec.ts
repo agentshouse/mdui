@@ -44,7 +44,7 @@ declare global {
 const personType =
   '---\ntype: definition\nfields:\n  name:\n    kind: string\n    required: true\n---\n';
 const projectType =
-  '---\ntype: definition\nfields:\n  title:\n    kind: string\n    required: true\n  amount:\n    kind: number\n  due:\n    kind: date\n  stage:\n    kind: enum\n    values: [Draft, Ready]\n  owner:\n    kind: reference\n    to: person\n  tags:\n    kind: list\n    of: string\nsections:\n  Summary:\n    kind: text\n  Steps:\n    kind: list\n---\n';
+  '---\ntype: definition\nfields:\n  title:\n    kind: string\n    required: true\n  amount:\n    kind: number\n  due:\n    kind: date\n  stage:\n    kind: enum\n    values: [Draft, Ready]\n  owner:\n    kind: reference\n    to: person\n  tags:\n    kind: list\n    of: string\nsections:\n  Summary:\n    kind: text\n  Steps:\n    kind: list\n    of: text\n---\n';
 const itemType =
   '---\ntype: definition\nfields:\n  title:\n    kind: string\n    required: true\nsections:\n  Body:\n    kind: text\n    required: true\n---\n';
 const ada = '---\ntype: person\nname: Ada\n---\n';
