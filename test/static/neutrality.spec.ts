@@ -20,7 +20,8 @@ test('refuses a Provider-specific import outside the Adapter and passes after it
 
   for (const source of [
     "import '@agentshouse/mdruntime-adapter';\n",
-    "export type NativeAdapter = typeof import('@agentshouse/mdruntime-adapter');\n",
+    "import type { NativeAdapter } from '@agentshouse/mdruntime-adapter';\nexport type { NativeAdapter };\n",
+    "export type { NativeAdapter } from '@agentshouse/mdruntime-adapter';\n",
   ]) {
     writeFileSync(entry, source);
     const refused = cruise();

@@ -56,15 +56,15 @@ public in-memory Adapter in the test placement. It belongs only to tests and
 ships in no App, by PRD-0005 in `agentshouse/mdruntime`.
 
 The static lane runs dependency-cruiser over `src/` and a specification that
-plants runtime and type-only Provider-specific imports outside the Adapter
-package, observes the `neutrality` error, removes the imports, and observes a
-clean result. Fixtures live under `tmp/` and are removed even on failure.
-The spec uses the lane's error reporter to verify both the nonzero exit and
-the named neutrality error.
-Dependency-cruiser uses its TypeScript parser with pre-compilation
-dependencies included. TypeScript is pinned to `6.0.3` because
-dependency-cruiser `18.4.0` requires the compiler API below version 7; Node
-and npm still use House's current pins.
+plants a runtime import, a type-only import, and a type-only re-export of a
+Provider-specific module outside the Adapter package, observes the
+`neutrality` error, removes the imports, and observes a clean result. Fixtures
+live under `tmp/` and are removed even on failure. The spec uses the lane's
+error reporter to verify both the nonzero exit and the named neutrality error.
+Dependency-cruiser parses with swc, which keeps type-only import and export
+declarations as dependencies. TypeScript `7.0.2` ships no compiler API that
+dependency-cruiser `18.4.0` admits, so its TypeScript parser is not used, and
+an inline `typeof import('…')` type query is not extracted.
 
 ## Cadence
 
