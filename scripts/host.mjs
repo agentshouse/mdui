@@ -16,7 +16,6 @@ for (const specifier of [
   '@agentshouse/mdruntime/host',
   '@agentshouse/app-bridge/test-host',
   '@agentshouse/mdmodel',
-  '@agentshouse/query',
   'micromark-core-commonmark',
   'micromark-util-character',
   'micromark-util-sanitize-uri',

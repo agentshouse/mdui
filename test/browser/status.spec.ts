@@ -45,9 +45,9 @@ async function start(page: Page) {
       discoveryIntervalMs: 250,
     });
     const seen: SyncStatus[] = [];
-    await opened.runtime.observe('sync-status', (status: SyncStatus) =>
-      seen.push(structuredClone(status)),
-    );
+    const status = await opened.runtime.observe('sync-status');
+    seen.push(structuredClone(status.current()));
+    status.subscribe((value: SyncStatus) => seen.push(structuredClone(value)));
     window.statusFixture = {
       runtime: opened.runtime,
       adapter,
@@ -68,6 +68,21 @@ test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.statusFixture?.stop());
 });
 
+async function saveTitle(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const runtime = window.statusFixture.runtime;
+    const written = await runtime.roomDraft.write('studio', 'notes/one.md', null, {
+      fields: { title: { value: 'Next', base: { value: 'One' } } },
+    });
+    if (written.outcome !== 'written' || written.roomDraft === null)
+      throw new Error(JSON.stringify(written));
+    const result = await runtime.save('studio', [
+      { path: written.roomDraft.path, revision: written.roomDraft.revision },
+    ]);
+    if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
+  });
+}
+
 test('shows Syncing then Synced with the last completed time from Observe', async ({ page }) => {
   await start(page);
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Synced');
@@ -85,11 +100,8 @@ test('shows Pending from Observe after a local Save', async ({ page }) => {
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Synced');
   await page.evaluate(async () => {
     window.statusFixture.adapter.script('mutate', { kind: 'transport-uncertainty' });
-    const result = await window.statusFixture.runtime.save('studio', [
-      { kind: 'field', path: 'notes/one.md', name: 'title', value: 'Next' },
-    ]);
-    if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
   });
+  await saveTitle(page);
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Pending');
   expect(
     await page.evaluate(async () => (await window.statusFixture.runtime.syncStatus()).state),
@@ -107,11 +119,8 @@ test('shows attention from Observe when a head Change Batch is Conflicted', asyn
       code: 'title_conflict',
       fields: { detail: 'title was changed on the Provider' },
     });
-    const result = await window.statusFixture.runtime.save('studio', [
-      { kind: 'field', path: 'notes/one.md', name: 'title', value: 'Next' },
-    ]);
-    if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
   });
+  await saveTitle(page);
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Conflicted');
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('title_conflict');
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText(
@@ -123,9 +132,13 @@ test('shows attention from Observe when a head Change Batch is Conflicted', asyn
     ),
   ).toMatchObject([
     {
-      locator: 'studio',
-      outcome: 'conflicted',
-      refusal: { code: 'title_conflict', fields: { detail: 'title was changed on the Provider' } },
+      room: 'studio',
+      path: 'notes/one.md',
+      returned: {
+        kind: 'conflicted',
+        code: 'title_conflict',
+        fields: { detail: 'title was changed on the Provider' },
+      },
     },
   ]);
 });
@@ -135,11 +148,8 @@ test('shows Expired on an attention-required entry with no ProviderRefusal', asy
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Synced');
   await page.evaluate(async () => {
     window.statusFixture.adapter.script('mutate', { kind: 'expired' });
-    const result = await window.statusFixture.runtime.save('studio', [
-      { kind: 'field', path: 'notes/one.md', name: 'title', value: 'Next' },
-    ]);
-    if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
   });
+  await saveTitle(page);
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Expired');
   expect(
     await page.evaluate(
@@ -147,9 +157,9 @@ test('shows Expired on an attention-required entry with no ProviderRefusal', asy
     ),
   ).toMatchObject([
     {
-      locator: 'studio',
-      outcome: 'expired',
-      refusal: null,
+      room: 'studio',
+      path: 'notes/one.md',
+      returned: { kind: 'expired' },
     },
   ]);
 });
@@ -164,11 +174,8 @@ test('shows Pending with the Provider reset for a retryable refusal', async ({ p
       fields: { retry_at: '2099-01-01T00:00:00.000Z' },
       reset: '2099-01-01T00:00:00.000Z',
     });
-    const result = await window.statusFixture.runtime.save('studio', [
-      { kind: 'field', path: 'notes/one.md', name: 'title', value: 'Next' },
-    ]);
-    if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
   });
+  await saveTitle(page);
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Pending');
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText(
     '2099-01-01T00:00:00.000Z',
@@ -180,13 +187,10 @@ test('keeps changes Pending while the Provider is unreachable', async ({ page })
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Synced');
   await page.evaluate(async () => {
     window.statusFixture.adapter.script('mutate', { kind: 'transport-uncertainty' });
-    const result = await window.statusFixture.runtime.save('studio', [
-      { kind: 'field', path: 'notes/one.md', name: 'title', value: 'Next' },
-    ]);
-    if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
     window.statusFixture.adapter.script('discover', { kind: 'transport-uncertainty' });
     window.statusFixture.adapter.script('refresh', { kind: 'transport-uncertainty' });
   });
+  await saveTitle(page);
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Pending');
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText(
     'Changes remain Pending',

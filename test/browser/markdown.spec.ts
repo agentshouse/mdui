@@ -72,9 +72,10 @@ async function render(page: Page, text?: string) {
       text ??
       (
         await window.markdownFixture.runtime.query({
-          selector: { room: 'studio', path: 'docs/readme.md' },
+          rooms: ['studio'],
+          select: { sections: ['Body'] },
         })
-      ).documents[0].sections.Body;
+      ).documents.find(({ path }) => path === 'docs/readme.md')!.sections!.Body;
     document.body.append(element);
   }, text);
   return page.locator('md-markdown');

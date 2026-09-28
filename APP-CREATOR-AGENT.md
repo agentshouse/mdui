@@ -38,38 +38,49 @@ else.
 ## The MD Runtime API
 
 App code reaches the MD Runtime through the remote client, imported from
-`@agentshouse/mdruntime/client`. The surfaces are Rooms, Query, Observe,
-Types, Draft, Save, Queue, History, Call, Log, storage loss, the reported
-persistence answer, Sync Status, reauthorization, conversation, the unsent
-instruction, and Presentation State.
+`@agentshouse/mdruntime/client`. The surfaces are Rooms, Slots, Query, Search,
+Observe, Types, Room Draft, Save, History, Call, Log, storage loss, the
+reported persistence answer, deployment facts, Sync Status, reauthorization,
+conversation, the chat draft, and Presentation State.
 
-Rooms, Query, Observe, Types, Draft, and Save never touch the network.
+Every `observe` resolves after its first complete value arrives to a handle:
+`current()` reads that value, `subscribe(listener)` hears later complete values
+and returns its unsubscribe, and `close()` ends the observation. Rooms, Slots,
+Query, Search, Observe, Types, Room Draft, and Save never touch the network.
 History and Call go to the Provider. Every member of the client is
-asynchronous, including those an in-process MD Runtime answers synchronously,
-so every call site awaits. Results are detached snapshots. Nothing in this
-surface returns the authorization, performs a request your code composes, or
-exposes the browser store.
+asynchronous, so every call site awaits. Results are detached snapshots.
+Nothing in this surface returns the authorization, performs a request your
+code composes, or exposes the browser store.
 
 App code never constructs a Runtime: it does not import the package main, the
 host entry, the in-memory Adapter at `@agentshouse/mdruntime/memory`, or an
 Adapter package, and it does not call `createMdRuntime` or `serveMdRuntime`.
 Hosts and tests use those entries; the served App does not.
 
-## Draft, Save, and outcome rules
+## Room Draft, Save, and outcome rules
 
-A Draft is durable: it survives reload and navigation, and every durable Draft
-is enumerable by its Room locator and Path. Save takes structured changes,
-validates locally, and on success appends one Change Batch to that Room's
-queue. A local validation failure leaves the Draft and creates nothing.
+The MD Runtime owns one Room Draft per Room and Path, shared by every App and
+tab. It is durable, survives reload and navigation, and is enumerable by Room
+locator and Path. A write names the revision it read, or `null` when no Room
+Draft existed, plus every field, section, preamble, whole Markdown, creation,
+move, or removal it should now change. A part new to the Room Draft names the
+visible value it was based on. A stale write or discard is refused with the
+current Room Draft; read that value before choosing another edit, and never
+overwrite it by retrying the old write at its revision.
+
+Save takes one Room and the Room Drafts it consumes, validates locally, and on
+success appends one Change Batch to that Room's queue and removes those Room
+Drafts. A stale, changed-underneath, durable-write, or validation refusal
+creates nothing and leaves the Room Drafts in place.
 
 Outcomes follow the Provider's answer. Accepted advances the confirmed layer.
-Conflicted and Rejected leave the head in place, carry the affected current
-state and the Provider's structured refusal code and fields as returned, and
-block that Room's queue; show that refusal as returned rather than as a
-sentence you compose. The App Creator resolves a head by discarding it or by
-saving a corrected Change Batch that replaces it in place. Transport failure
-and Provider unavailability keep work Pending and are never read as a
-rejection. The MD Runtime never combines, reorders, or rebases.
+Conflicted, Rejected, expired, and withdrawn changes leave the queue and return
+as Room Drafts marked with why; show a Provider's structured refusal code and
+fields as returned rather than as a sentence you compose. The rest of the
+queue keeps synchronizing. Saving or discarding a returned Room Draft resolves
+its attention. There is no queue discard and no Save in place of a queue head.
+Transport failure and Provider unavailability keep work Pending and are never
+read as a rejection. The MD Runtime never combines, reorders, or rebases.
 
 ## The neutrality rule
 

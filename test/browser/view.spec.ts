@@ -154,7 +154,9 @@ async function mount(page: Page, path: string, room = 'studio') {
 async function queried(page: Page, path: string): Promise<QueryDocument> {
   return page.evaluate(
     async (path) =>
-      (await window.viewFixture.runtime.query({ selector: { room: 'studio', path } })).documents[0],
+      (await window.viewFixture.runtime.query({ rooms: ['studio'], select: 'all' })).documents.find(
+        (document) => document.path === path,
+      )!,
     path,
   );
 }
@@ -208,7 +210,7 @@ test('renders typed fields, preamble, declared extra and structured sections fro
   await mount(page, 'work/alpha.md');
   const document = await queried(page, 'work/alpha.md');
   expect(document.preamble).toContain('Opening words before any heading.');
-  expect(Object.keys(document.sections)).toEqual(['Extra', 'Summary', 'Steps']);
+  expect(Object.keys(document.sections ?? {})).toEqual(['Extra', 'Summary', 'Steps']);
   await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Alpha');
   await expect(page.getByRole('spinbutton', { name: 'amount', exact: true })).toHaveValue('12.5');
   await expect(page.getByLabel('due', { exact: true })).toHaveValue('2026-09-09');
@@ -245,9 +247,9 @@ test('renders typed fields, preamble, declared extra and structured sections fro
     'Extra',
     'Backlinks',
   ]);
-  expect(document.sections.Summary).toContain('The declared summary.');
-  expect(document.sections.Extra).toContain('An additional existing section.');
-  expect(document.sections.Steps).toContain('- first');
+  expect(document.sections?.Summary).toContain('The declared summary.');
+  expect(document.sections?.Extra).toContain('An additional existing section.');
+  expect(document.sections?.Steps).toContain('- first');
 });
 
 test('renders an untyped file as its whole Query text', async ({ page }) => {

@@ -1,4 +1,4 @@
-import { observation, queueKinds, refusalParts } from './runtime.js';
+import { observation, refusalParts, returnedKinds } from './runtime.js';
 import { adopt, statusStyles } from './theme.js';
 const states = {
     pending: 'Pending',
@@ -26,7 +26,7 @@ export class SyncStatusIndicator extends HTMLElement {
         this.unobserve?.();
         this.unobserve = undefined;
         if (!this.isConnected || this.runtime === undefined) return;
-        this.unobserve = observation(this.runtime.observe('sync-status', (status)=>this.present(status)));
+        this.unobserve = observation(this.runtime.observe('sync-status'), (status)=>this.present(status));
     }
     present(status) {
         adopt(this.root, statusStyles);
@@ -40,10 +40,10 @@ export class SyncStatusIndicator extends HTMLElement {
         for (const entry of status.attentionRequired){
             const attention = document.createElement('p');
             attention.className = 'attention';
-            attention.textContent = queueKinds[entry.outcome];
+            attention.textContent = returnedKinds[entry.returned.kind];
             region.append(attention);
-            if (entry.refusal === null) continue;
-            for (const part of refusalParts(entry.refusal)){
+            if (!('code' in entry.returned)) continue;
+            for (const part of refusalParts(entry.returned)){
                 const text = document.createElement('p');
                 text.className = 'attention';
                 text.textContent = part;

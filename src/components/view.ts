@@ -1,11 +1,11 @@
 import type {
   AppRoom,
-  Change,
   HistoryResult,
   HistoryRevision,
   MdType,
   QueryDocument,
-  QueueEntry,
+  RoomDraft,
+  RoomDraftParts,
   SaveRefusal,
 } from '@agentshouse/mdruntime';
 import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
@@ -18,22 +18,12 @@ import { adopt, viewStyles } from './theme.js';
 
 type OpenPath = { room: string; path: string };
 
-type FileDraft = {
-  fields?: Record<string, unknown>;
-  sections?: Record<string, string>;
-  preamble?: string;
-  whole?: string;
-  create?: { type: string };
-  moveTo?: string;
-  remove?: boolean;
-};
-
 type Editor = {
   part: 'preamble' | 'section' | 'whole';
   name: string;
   opened: string;
   live: string;
-  snapshot: FileDraft;
+  snapshot: RoomDraftParts | null;
 };
 
 const ROOM_ROOT = 'room';
@@ -64,7 +54,7 @@ function asField(value: unknown): FieldDefinition | undefined {
 function fieldValue(path: string, spec: FieldDefinition, value: unknown): unknown {
   if (spec.kind === 'reference' && typeof value === 'string')
     return internalPath(value, path)?.path;
-  if (spec.kind === 'list' && spec.of === 'reference' && Array.isArray(value)) {
+  if (spec.kind === 'list' && spec.of?.kind === 'reference' && Array.isArray(value)) {
     return value.map((entry) =>
       typeof entry === 'string' ? internalPath(entry, path)?.path : entry,
     );
@@ -74,43 +64,14 @@ function fieldValue(path: string, spec: FieldDefinition, value: unknown): unknow
 
 function storedField(path: string, spec: FieldDefinition, value: unknown): unknown {
   if (spec.kind === 'reference' && typeof value === 'string') return relativePath(path, value);
-  if (spec.kind === 'list' && spec.of === 'reference' && Array.isArray(value)) {
+  if (spec.kind === 'list' && spec.of?.kind === 'reference' && Array.isArray(value)) {
     return value.map((entry) => (typeof entry === 'string' ? relativePath(path, entry) : entry));
   }
   return value;
 }
 
-function draftEmpty(draft: FileDraft): boolean {
-  return (
-    draft.fields === undefined &&
-    draft.sections === undefined &&
-    draft.preamble === undefined &&
-    draft.whole === undefined &&
-    draft.create === undefined &&
-    draft.moveTo === undefined &&
-    draft.remove !== true
-  );
-}
-
-function overlayDraft(base: FileDraft, newer: FileDraft): FileDraft {
-  if (newer.whole !== undefined) return { ...newer };
-  return {
-    ...base,
-    ...newer,
-    fields:
-      base.fields === undefined && newer.fields === undefined
-        ? undefined
-        : { ...base.fields, ...newer.fields },
-    sections:
-      base.sections === undefined && newer.sections === undefined
-        ? undefined
-        : { ...base.sections, ...newer.sections },
-    preamble: newer.preamble ?? base.preamble,
-    whole: newer.whole ?? base.whole,
-    create: newer.create ?? base.create,
-    moveTo: newer.moveTo ?? base.moveTo,
-    remove: newer.remove ?? base.remove,
-  };
+function draftEmpty(parts: RoomDraftParts): boolean {
+  return Object.keys(parts).length === 0;
 }
 
 function editorText(opened: string, live: string): string {
@@ -143,60 +104,14 @@ function equal(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function asDraft(value: unknown): FileDraft | null {
-  if (typeof value !== 'object' || value === null) return null;
-  return value as FileDraft;
-}
-
-function cloneDraft(draft: FileDraft | null): FileDraft {
-  return structuredClone(draft ?? {});
+function cloneParts(draft: RoomDraft | null): RoomDraftParts {
+  return structuredClone(draft?.parts ?? {});
 }
 
 function currentText(value: unknown): string {
   if (typeof value === 'string') return value;
   if (value === undefined || value === null) return '';
   return JSON.stringify(value);
-}
-
-function changePath(change: Change): string {
-  return change.path;
-}
-
-function draftFromChanges(changes: readonly Change[], path: string): FileDraft {
-  const draft: FileDraft = {};
-  for (const change of changes) {
-    if (changePath(change) !== path && !(change.kind === 'move' && change.to === path)) continue;
-    if (change.kind === 'field') {
-      draft.fields = { ...draft.fields, [change.name]: change.value };
-      continue;
-    }
-    if (change.kind === 'section') {
-      draft.sections = { ...draft.sections, [change.name]: change.value };
-      continue;
-    }
-    if (change.kind === 'preamble') {
-      draft.preamble = change.value;
-      continue;
-    }
-    if (change.kind === 'replace') {
-      draft.whole = change.content;
-      continue;
-    }
-    if (change.kind === 'create') {
-      draft.create = { type: String(change.fields.type ?? '') };
-      const fields = { ...change.fields };
-      delete fields.type;
-      draft.fields = fields;
-      draft.sections = { ...change.sections };
-      continue;
-    }
-    if (change.kind === 'move') {
-      draft.moveTo = change.to;
-      continue;
-    }
-    if (change.kind === 'remove') draft.remove = true;
-  }
-  return draft;
 }
 
 function button(label: string, name = label): HTMLButtonElement {
@@ -233,12 +148,11 @@ export class DocumentView extends HTMLElement {
   private revisionGeneration = 0;
   private revisionContent: string | undefined;
   private selectedRevision: string | undefined;
-  private draft: FileDraft | null = null;
+  private draft: RoomDraft | null = null;
+  private pendingParts: RoomDraftParts | null | undefined;
+  private writeEpoch = 0;
   private editor: Editor | undefined;
   private localRefusal: SaveRefusal | undefined;
-  private queue: readonly QueueEntry[] = [];
-  private restoredHead: string | undefined;
-  private conflictBaseline: QueryDocument | undefined;
   private writeChain: Promise<void> = Promise.resolve();
   private readonly root = this.attachShadow({ mode: 'open' });
 
@@ -253,7 +167,9 @@ export class DocumentView extends HTMLElement {
     this.runtime = runtime;
     this.setAttribute('room', room);
     this.setAttribute('path', path);
-    await runtime.draft.replace(room, path, { create: { type }, fields: {}, sections: {} });
+    await runtime.roomDraft.write(room, path, null, {
+      creation: { type, fields: {}, sections: {} },
+    });
     this.watch();
   }
 
@@ -302,10 +218,21 @@ export class DocumentView extends HTMLElement {
   }
 
   private resetEdit(): void {
+    this.writeEpoch += 1;
+    this.pendingParts = undefined;
     this.editor = undefined;
     this.localRefusal = undefined;
-    this.restoredHead = undefined;
-    this.conflictBaseline = undefined;
+  }
+
+  private intendedParts(): RoomDraftParts {
+    return this.pendingParts === undefined
+      ? cloneParts(this.draft)
+      : structuredClone(this.pendingParts ?? {});
+  }
+
+  private intendedDraft(): RoomDraftParts | null {
+    if (this.pendingParts !== undefined) return structuredClone(this.pendingParts);
+    return this.draft === null ? null : cloneParts(this.draft);
   }
 
   private roomName(): string {
@@ -321,23 +248,12 @@ export class DocumentView extends HTMLElement {
   }
 
   private definition(): MdType | undefined {
-    const type = this.current?.type ?? this.draft?.create?.type;
+    const creation = this.draft?.parts.creation;
+    const type =
+      this.current?.type ??
+      (creation !== undefined && 'type' in creation ? creation.type : undefined);
     if (type === undefined) return;
     return mdTypes(this.roomState?.model).find((entry) => entry.name === type);
-  }
-
-  private refusedHead(): QueueEntry | undefined {
-    const [head] = this.queue;
-    if (head === undefined) return;
-    if (head.outcome.kind !== 'conflicted' && head.outcome.kind !== 'rejected') return;
-    const path = this.filePath();
-    if (
-      !head.batch.changes.some(
-        (change) => changePath(change) === path || (change.kind === 'move' && change.to === path),
-      )
-    )
-      return;
-    return head;
   }
 
   private watch(): void {
@@ -345,7 +261,6 @@ export class DocumentView extends HTMLElement {
     this.unobserve = undefined;
     this.current = undefined;
     this.roomState = undefined;
-    this.queue = [];
     const generation = (this.watchGeneration += 1);
     this.unobserve = () => {
       this.watchGeneration += 1;
@@ -355,39 +270,30 @@ export class DocumentView extends HTMLElement {
     const room = this.roomName();
     const path = this.filePath();
     void (async () => {
-      const value = await runtime.draft.read(room, path);
-      if (generation !== this.watchGeneration) return;
-      this.draft = asDraft(value);
       let queried = false;
       const stops = [
-        observation(
-          runtime.observe('query', { selector: { room, path } }, (result) => {
-            if (generation !== this.watchGeneration) return;
-            const current = result.documents[0];
-            if (queried && equal(this.current, current)) return;
-            queried = true;
-            this.current = current;
-            this.present();
-          }),
-        ),
-        observation(
-          runtime.observe('rooms', (rooms) => {
-            if (generation !== this.watchGeneration) return;
-            const state = rooms.find((entry) => entry.locator === room);
-            if (equal(this.roomState, state)) return;
-            this.roomState = state;
-            this.present();
-          }),
-        ),
-        observation(
-          runtime.observe('queue', room, (entries) => {
-            if (generation !== this.watchGeneration) return;
-            if (equal(this.queue, entries)) return;
-            this.queue = entries;
-            void this.restoreRefused();
-            this.present();
-          }),
-        ),
+        observation(runtime.observe('query', { rooms: [room], select: 'all' }), (result) => {
+          if (generation !== this.watchGeneration) return;
+          const current = result.documents.find((document) => document.path === path);
+          if (queried && equal(this.current, current)) return;
+          queried = true;
+          this.current = current;
+          this.present();
+        }),
+        observation(runtime.observe('rooms'), (rooms) => {
+          if (generation !== this.watchGeneration) return;
+          const state = rooms.find((entry) => entry.locator === room);
+          if (equal(this.roomState, state)) return;
+          this.roomState = state;
+          this.present();
+        }),
+        observation(runtime.observe('room-drafts'), (drafts) => {
+          if (generation !== this.watchGeneration) return;
+          const draft = drafts.find((entry) => entry.room === room && entry.path === path) ?? null;
+          if (equal(this.draft, draft)) return;
+          this.draft = draft;
+          this.present();
+        }),
       ];
       if (generation !== this.watchGeneration) {
         for (const stop of stops) stop();
@@ -400,69 +306,106 @@ export class DocumentView extends HTMLElement {
     })();
   }
 
-  private async restoreRefused(): Promise<void> {
-    const head = this.refusedHead();
-    if (head === undefined || this.runtime === undefined) return;
-    if (this.restoredHead === head.batch.id) return;
-    this.restoredHead = head.batch.id;
-    const refused = draftFromChanges(head.batch.changes, this.filePath());
-    const next = this.draft === null ? refused : overlayDraft(refused, this.draft);
-    await this.keepDraft(next);
-    this.present();
-  }
-
   private runWrite(work: () => Promise<void>): Promise<void> {
     const next = this.writeChain.then(work, work);
     this.writeChain = next.catch(() => undefined);
     return next;
   }
 
-  private async keepDraft(next: FileDraft | null): Promise<void> {
-    if (this.runtime === undefined) return;
+  private async keepDraft(next: RoomDraftParts | null): Promise<boolean> {
+    if (this.runtime === undefined) return false;
     const room = this.roomName();
     const path = this.filePath();
-    this.draft = next;
+    const epoch = this.writeEpoch;
+    this.pendingParts = next;
+    let written = true;
     await this.runWrite(async () => {
       if (this.runtime === undefined) return;
-      if (next === null) {
-        await this.runtime.draft.discard(room, path);
+      if (epoch !== this.writeEpoch) {
+        written = false;
         return;
       }
-      await this.runtime.draft.replace(room, path, next);
+      if (next === null) {
+        if (this.draft === null) {
+          if (this.pendingParts === next) this.pendingParts = undefined;
+          return;
+        }
+        const result = await this.runtime.roomDraft.discard(room, path, this.draft.revision);
+        if (result.outcome === 'written') {
+          this.draft = null;
+          if (this.pendingParts === next) this.pendingParts = undefined;
+          this.localRefusal = undefined;
+          return;
+        }
+        written = false;
+        this.writeEpoch += 1;
+        this.pendingParts = undefined;
+        this.draft = result.current;
+        this.editor = undefined;
+        this.localRefusal = { rule: 'stale', file: path };
+        this.present();
+        return;
+      }
+      const result = await this.runtime.roomDraft.write(
+        room,
+        path,
+        this.draft?.revision ?? null,
+        next,
+      );
+      if (result.outcome === 'written') {
+        this.draft = result.roomDraft;
+        if (this.pendingParts === next) this.pendingParts = undefined;
+        this.localRefusal = undefined;
+        return;
+      }
+      written = false;
+      this.writeEpoch += 1;
+      this.pendingParts = undefined;
+      this.draft = result.current;
+      this.editor = undefined;
+      this.localRefusal = { rule: 'stale', file: path };
+      this.present();
     });
+    return written;
   }
 
   private displayedField(name: string, spec: FieldDefinition): unknown {
-    const drafted = this.draft?.fields?.[name];
-    if (drafted !== undefined || (this.draft?.fields !== undefined && name in this.draft.fields))
-      return fieldValue(this.filePath(), spec, drafted);
-    const value = this.current?.fields[name];
+    const creation = this.draft?.parts.creation;
+    if (creation !== undefined && 'type' in creation && Object.hasOwn(creation.fields, name))
+      return fieldValue(this.filePath(), spec, creation.fields[name]);
+    const drafted = this.draft?.parts.fields?.[name];
+    if (drafted !== undefined) return fieldValue(this.filePath(), spec, drafted.value);
+    const value = this.current?.fields?.[name];
     return value === undefined ? undefined : fieldValue(this.filePath(), spec, value);
   }
 
   private displayedSection(name: string): string | undefined {
-    if (this.draft?.sections !== undefined && name in this.draft.sections)
-      return this.draft.sections[name];
-    return this.current?.sections[name];
+    const creation = this.draft?.parts.creation;
+    if (creation !== undefined && 'type' in creation && Object.hasOwn(creation.sections, name))
+      return creation.sections[name];
+    const drafted = this.draft?.parts.sections?.[name];
+    if (drafted !== undefined) return drafted.value;
+    return this.current?.sections?.[name];
   }
 
   private refusalAt(part: string): boolean {
     if (this.localRefusal === undefined) return false;
     if (this.localRefusal.location === part) return true;
     if (this.localRefusal.location !== undefined) return false;
-    if (part === 'preamble') return this.draft?.preamble !== undefined;
-    return this.draft?.fields !== undefined && part in this.draft.fields
+    if (part === 'preamble') return this.draft?.parts.preamble !== undefined;
+    return this.draft?.parts.fields !== undefined && part in this.draft.parts.fields
       ? true
-      : this.draft?.sections !== undefined && part in this.draft.sections;
+      : this.draft?.parts.sections !== undefined && part in this.draft.parts.sections;
   }
 
   private displayedPreamble(): string {
-    return this.draft?.preamble ?? this.current?.preamble ?? '';
+    return this.draft?.parts.preamble?.value ?? this.current?.preamble ?? '';
   }
 
   private displayedWhole(): string | undefined {
-    if (this.draft?.whole !== undefined) return this.draft.whole;
-    return this.current?.content;
+    const creation = this.draft?.parts.creation;
+    if (creation !== undefined && 'markdown' in creation) return creation.markdown;
+    return this.draft?.parts.markdown?.value ?? this.current?.markdown;
   }
 
   private refusalUnplaced(): boolean {
@@ -471,61 +414,29 @@ export class DocumentView extends HTMLElement {
     if (location === undefined) return true;
     if (location === 'preamble') return false;
     if (this.definition()?.fields[location] !== undefined) return false;
-    if (this.current?.sections[location] !== undefined) return false;
-    if (this.draft?.sections !== undefined && location in this.draft.sections) return false;
+    if (this.current?.sections?.[location] !== undefined) return false;
+    if (this.draft?.parts.sections !== undefined && location in this.draft.parts.sections)
+      return false;
     return true;
   }
 
   private marks(): Map<string, unknown> {
     const marks = new Map<string, unknown>();
-    const file = this.current;
-    const head = this.refusedHead();
-    if (file === undefined || head === undefined) return marks;
-    if (head.batch.changes.some((change) => change.kind === 'replace' && change.path === file.path))
-      return marks;
-    const priors = new Map<string, unknown>();
-    for (const precondition of head.batch.preconditions) {
-      if (!('path' in precondition) || precondition.path !== file.path) continue;
-      if (precondition.kind === 'field')
-        priors.set(`field:${precondition.name}`, precondition.value);
-      if (precondition.kind === 'section')
-        priors.set(`section:${precondition.name}`, precondition.value);
-      if (precondition.kind === 'preamble') priors.set('preamble', precondition.value);
-    }
-    const baseline = this.conflictBaseline;
-    const priorOf = (key: string, fromBaseline: unknown) => {
-      if (priors.has(key)) return priors.get(key);
-      if (baseline !== undefined) return fromBaseline;
-    };
-    const note = (key: string, current: unknown, prior: unknown) => {
-      if (prior !== undefined && !equal(current, prior)) marks.set(key, current);
-    };
-    const fieldNames = new Set([
-      ...Object.keys(file.fields),
-      ...Object.keys(baseline?.fields ?? {}),
-    ]);
-    for (const name of fieldNames) {
-      note(`field:${name}`, file.fields[name], priorOf(`field:${name}`, baseline?.fields[name]));
-    }
-    const sectionNames = new Set([
-      ...Object.keys(file.sections),
-      ...Object.keys(baseline?.sections ?? {}),
-    ]);
-    for (const name of sectionNames) {
-      note(
-        `section:${name}`,
-        file.sections[name],
-        priorOf(`section:${name}`, baseline?.sections[name]),
-      );
-    }
-    note('preamble', file.preamble, priorOf('preamble', baseline?.preamble));
+    const changed = this.draft?.changedUnderneath;
+    if (changed === undefined) return marks;
+    for (const [name, value] of Object.entries(changed.fields ?? {}))
+      marks.set(`field:${name}`, value === null ? undefined : value.value);
+    for (const [name, value] of Object.entries(changed.sections ?? {}))
+      marks.set(`section:${name}`, value);
+    if (changed.preamble !== undefined) marks.set('preamble', changed.preamble);
+    if (changed.markdown !== undefined) marks.set('whole', changed.markdown);
     return marks;
   }
 
   private present(): void {
     if (!this.writable() && this.editor !== undefined) {
       const next = this.applyEditor(
-        cloneDraft(this.draft),
+        this.intendedParts(),
         this.editor,
         editorText(this.editor.opened, this.editor.live),
       );
@@ -544,7 +455,7 @@ export class DocumentView extends HTMLElement {
     if (this.writable()) body.append(this.documentControls());
     if (this.current !== undefined && this.runtime !== undefined)
       this.renderDocument(body, this.current);
-    else if (this.draft?.create !== undefined && this.runtime !== undefined)
+    else if (this.draft?.parts.creation !== undefined && this.runtime !== undefined)
       this.renderCreation(body);
     this.root.replaceChildren(heading, reason, body);
   }
@@ -554,19 +465,11 @@ export class DocumentView extends HTMLElement {
     panel.className = 'structure';
     panel.setAttribute('role', 'region');
     panel.setAttribute('aria-label', 'Document');
-    const head = this.refusedHead();
-    if (head !== undefined && 'code' in head.outcome) {
-      for (const part of refusalParts(head.outcome)) panel.append(message('refusal', part));
-    }
-    if (
-      head !== undefined &&
-      'affected' in head.outcome &&
-      head.batch.changes.some(
-        (change) => change.kind === 'replace' && change.path === this.filePath(),
-      )
-    ) {
-      const provider = head.outcome.affected[this.filePath()];
-      if (typeof provider === 'string') panel.append(message('current', provider));
+    const returned = this.draft?.returned;
+    if (returned !== null && returned !== undefined) {
+      panel.append(message('refusal', returned.kind));
+      if ('code' in returned)
+        for (const part of refusalParts(returned)) panel.append(message('refusal', part));
     }
     if (this.localRefusal !== undefined && this.refusalUnplaced()) {
       panel.append(message('error', this.localRefusal.rule));
@@ -578,12 +481,18 @@ export class DocumentView extends HTMLElement {
     const renameLabel = document.createElement('label');
     renameLabel.htmlFor = 'rename';
     renameLabel.textContent = 'Rename';
-    rename.value = this.draft?.moveTo ?? this.filePath();
+    rename.value = this.draft?.parts.move?.to ?? this.filePath();
     rename.addEventListener('change', () => {
-      const next = cloneDraft(this.draft);
-      if (rename.value === this.filePath()) delete next.moveTo;
-      else next.moveTo = rename.value;
-      void this.keepDraft(next);
+      const held = this.intendedParts();
+      const { move: _move, ...withoutMove } = held;
+      const next: RoomDraftParts =
+        rename.value === this.filePath()
+          ? withoutMove
+          : {
+              ...held,
+              move: { to: rename.value, base: this.current?.markdown ?? null },
+            };
+      void this.keepDraft(draftEmpty(next) ? null : next);
     });
     panel.append(renameLabel, rename);
     const actions = document.createElement('div');
@@ -600,10 +509,10 @@ export class DocumentView extends HTMLElement {
       });
       actions.append(remove);
     }
-    if (head !== undefined) {
+    if (this.draft !== null) {
       const discard = button('Discard');
       discard.addEventListener('click', () => {
-        void this.discardHead(head.batch.id);
+        void this.discardDraft();
       });
       actions.append(discard);
     }
@@ -670,14 +579,14 @@ export class DocumentView extends HTMLElement {
       if (definition !== undefined) body.append(this.fields(definition));
       body.append(this.textPart('Preamble', this.displayedPreamble(), this.writable(), 'preamble'));
       const declared = definition === undefined ? [] : Object.keys(definition.sections);
-      const extra = Object.keys(file.sections).filter((name) => !declared.includes(name));
+      const extra = Object.keys(file.sections ?? {}).filter((name) => !declared.includes(name));
       const names =
-        this.draft?.create === undefined
+        this.draft?.parts.creation === undefined
           ? [...declared, ...extra]
-          : [...new Set([...declared, ...extra, ...Object.keys(this.draft.sections ?? {})])];
+          : [...new Set([...declared, ...extra, ...Object.keys(this.draft.parts.sections ?? {})])];
       for (const name of names) {
         const text = this.displayedSection(name);
-        if (text === undefined && this.draft?.create === undefined) continue;
+        if (text === undefined && this.draft?.parts.creation === undefined) continue;
         body.append(this.textPart(name, text ?? '', this.writable()));
       }
     }
@@ -762,7 +671,8 @@ export class DocumentView extends HTMLElement {
         section.append(edit);
       }
     }
-    const marked = this.marks().get(kind === 'preamble' ? 'preamble' : `section:${name}`);
+    const mark = kind === 'preamble' ? 'preamble' : kind === 'whole' ? 'whole' : `section:${name}`;
+    const marked = this.marks().get(mark);
     if (marked !== undefined)
       section.append(message('current', `Current value: ${currentText(marked)}`));
     if (this.refusalAt(kind === 'preamble' ? 'preamble' : name))
@@ -770,34 +680,61 @@ export class DocumentView extends HTMLElement {
     return section;
   }
 
-  private applyEditor(draft: FileDraft, editor: Editor, text: string): FileDraft {
+  private applyEditor(parts: RoomDraftParts, editor: Editor, text: string): RoomDraftParts {
+    const creation = parts.creation;
+    if (creation !== undefined && 'markdown' in creation) {
+      return { ...parts, creation: { markdown: text } };
+    }
+    if (creation !== undefined && 'type' in creation && editor.part === 'section') {
+      return {
+        ...parts,
+        creation: {
+          ...creation,
+          sections: { ...creation.sections, [editor.name]: text },
+        },
+      };
+    }
     if (editor.part === 'whole') {
-      draft.whole = text;
-      delete draft.fields;
-      delete draft.sections;
-      delete draft.preamble;
-      return draft;
+      const {
+        fields: _fields,
+        sections: _sections,
+        preamble: _preamble,
+        ...withoutStructuredText
+      } = parts;
+      return {
+        ...withoutStructuredText,
+        markdown: { value: text, base: this.current?.markdown ?? '' },
+      };
     }
     if (editor.part === 'preamble') {
-      draft.preamble = text;
-      return draft;
+      return { ...parts, preamble: { value: text, base: this.current?.preamble ?? '' } };
     }
-    draft.sections = { ...draft.sections, [editor.name]: text };
-    return draft;
+    return {
+      ...parts,
+      sections: {
+        ...parts.sections,
+        [editor.name]: { value: text, base: this.current?.sections?.[editor.name] ?? '' },
+      },
+    };
   }
 
   private openEditor(part: Editor['part'], name: string, opened: string): void {
     if (this.editor !== undefined) {
       const previous = this.editor;
       const retained = this.applyEditor(
-        cloneDraft(this.draft),
+        this.intendedParts(),
         previous,
         editorText(previous.opened, previous.live),
       );
-      this.draft = retained;
       void this.keepDraft(retained);
     }
-    this.editor = { part, name, opened, live: opened, snapshot: cloneDraft(this.draft) };
+    this.editor = {
+      part,
+      name,
+      opened,
+      live: opened,
+      snapshot: this.intendedDraft(),
+    };
     this.present();
     this.root.querySelector('textarea')?.focus();
   }
@@ -805,108 +742,83 @@ export class DocumentView extends HTMLElement {
   private persistEditor(): Promise<void> {
     if (this.editor === undefined) return Promise.resolve();
     const next = this.applyEditor(
-      cloneDraft(this.draft),
+      this.intendedParts(),
       this.editor,
       editorText(this.editor.opened, this.editor.live),
     );
-    return this.keepDraft(next);
+    return this.keepDraft(next).then(() => undefined);
   }
 
-  private async commitEditor(value?: string): Promise<void> {
-    if (this.editor === undefined) return;
+  private async commitEditor(value?: string): Promise<boolean> {
+    if (this.editor === undefined) return true;
     const text = editorText(this.editor.opened, value ?? this.editor.live);
-    const next = this.applyEditor(cloneDraft(this.draft), this.editor, text);
+    const next = this.applyEditor(this.intendedParts(), this.editor, text);
     this.editor = undefined;
-    await this.keepDraft(next);
+    const written = await this.keepDraft(next);
     this.present();
+    return written;
   }
 
   private async cancelEditor(): Promise<void> {
     if (this.editor === undefined) return;
-    const next = cloneDraft(this.editor.snapshot);
+    const next = structuredClone(this.editor.snapshot);
     this.editor = undefined;
-    await this.keepDraft(draftEmpty(next) ? null : next);
+    await this.keepDraft(next === null || draftEmpty(next) ? null : next);
     this.present();
   }
 
   private async changeField(name: string, value: unknown): Promise<void> {
     const spec = asField(this.definition()?.fields[name]);
-    const previous = this.current?.fields[name];
+    const previous = this.current?.fields?.[name];
     const intended = spec === undefined ? value : storedField(this.filePath(), spec, value);
-    const next = cloneDraft(this.draft);
-    delete next.whole;
+    const held = this.intendedParts();
+    const creation = held.creation;
+    if (creation !== undefined && 'type' in creation) {
+      const next: RoomDraftParts = {
+        ...held,
+        creation: { ...creation, fields: { ...creation.fields, [name]: intended } },
+      };
+      await this.keepDraft(next);
+      return;
+    }
+    const { markdown: _markdown, ...withoutMarkdown } = held;
     if (equal(previous, intended)) {
-      if (next.fields !== undefined) {
-        delete next.fields[name];
-        if (Object.keys(next.fields).length === 0) delete next.fields;
-      }
+      const fields = Object.fromEntries(
+        Object.entries(withoutMarkdown.fields ?? {}).filter(([field]) => field !== name),
+      );
+      const { fields: _fields, ...withoutFields } = withoutMarkdown;
+      const next: RoomDraftParts =
+        Object.keys(fields).length === 0 ? withoutFields : { ...withoutFields, fields };
       await this.keepDraft(draftEmpty(next) ? null : next);
       return;
     }
-    next.fields = { ...next.fields, [name]: intended };
+    const next: RoomDraftParts = {
+      ...withoutMarkdown,
+      fields: {
+        ...withoutMarkdown.fields,
+        [name]: {
+          value: intended,
+          base: previous === undefined ? null : { value: previous },
+        },
+      },
+    };
     await this.keepDraft(next);
-  }
-
-  private changesFromDraft(): Change[] {
-    const path = this.draft?.moveTo ?? this.filePath();
-    const source = this.filePath();
-    const draft = this.draft ?? {};
-    if (draft.remove === true) return [{ kind: 'remove', path: source }];
-    if (draft.create !== undefined) {
-      const definition = this.definition();
-      const fields: Record<string, unknown> = { type: draft.create.type, ...draft.fields };
-      const sections: Record<string, string> = {};
-      for (const name of Object.keys(definition?.sections ?? {})) {
-        sections[name] = draft.sections?.[name] ?? '';
-      }
-      return [{ kind: 'create', path, fields, sections }];
-    }
-    if (draft.whole !== undefined) {
-      const changes: Change[] = [{ kind: 'replace', path: source, content: draft.whole }];
-      if (draft.moveTo !== undefined && draft.moveTo !== source)
-        changes.push({ kind: 'move', path: source, to: draft.moveTo });
-      return changes;
-    }
-    const changes: Change[] = [];
-    const file = this.current;
-    for (const [name, value] of Object.entries(draft.fields ?? {})) {
-      const previous = file?.fields[name];
-      if (!equal(previous, value)) changes.push({ kind: 'field', path: source, name, value });
-    }
-    for (const [name, value] of Object.entries(draft.sections ?? {})) {
-      if (file?.sections[name] === value) continue;
-      changes.push({ kind: 'section', path: source, name, value });
-    }
-    if (draft.preamble !== undefined && draft.preamble !== file?.preamble)
-      changes.push({ kind: 'preamble', path: source, value: draft.preamble });
-    if (draft.moveTo !== undefined && draft.moveTo !== source)
-      changes.push({ kind: 'move', path: source, to: draft.moveTo });
-    return changes;
   }
 
   private async fileSave(): Promise<void> {
     if (this.runtime === undefined) return;
-    if (this.editor !== undefined) await this.commitEditor();
+    const writeEpoch = this.writeEpoch;
+    if (this.editor !== undefined && !(await this.commitEditor())) return;
     await this.writeChain;
-    const moved = this.draft?.moveTo;
-    const changes = this.changesFromDraft();
-    const head = this.refusedHead();
-    const snapshot = this.draft;
-    this.conflictBaseline = this.current;
-    this.draft = null;
-    const result = await this.runtime.save(
-      this.roomName(),
-      changes,
-      head === undefined ? undefined : head.batch.id,
-    );
+    if (writeEpoch !== this.writeEpoch) return;
+    if (this.draft === null) return;
+    const { path, revision } = this.draft;
+    const moved = this.draft.parts.move?.to;
+    const result = await this.runtime.save(this.roomName(), [{ path, revision }]);
     if (result.outcome === 'refused') {
-      if (result.rule === 'durable-write') {
-        this.draft = snapshot;
-      } else {
-        const retained = cloneDraft(snapshot);
-        delete retained.remove;
-        this.draft = draftEmpty(retained) ? null : retained;
-        await this.keepDraft(this.draft);
+      if (result.rule !== 'durable-write' && this.draft.parts.removal !== undefined) {
+        const { removal: _removal, ...retained } = this.draft.parts;
+        if (!(await this.keepDraft(draftEmpty(retained) ? null : retained))) return;
       }
       this.localRefusal = result;
       this.present();
@@ -914,29 +826,26 @@ export class DocumentView extends HTMLElement {
     }
     this.localRefusal = undefined;
     this.editor = undefined;
-    this.draft = asDraft(await this.runtime.draft.read(this.roomName(), this.filePath()));
-    if (
-      moved !== undefined &&
-      moved !== this.filePath() &&
-      changes.some((change) => change.kind === 'move')
-    )
+    this.draft = await this.runtime.roomDraft.read(this.roomName(), moved ?? this.filePath());
+    if (moved !== undefined && moved !== this.filePath()) {
       this.setAttribute('path', moved);
+      return;
+    }
     this.present();
   }
 
   private async removeFile(): Promise<void> {
-    const next = cloneDraft(this.draft);
-    next.remove = true;
-    await this.keepDraft(next);
+    const next: RoomDraftParts = {
+      ...this.intendedParts(),
+      removal: { base: this.current?.markdown ?? null },
+    };
+    if (!(await this.keepDraft(next))) return;
     await this.fileSave();
   }
 
-  private async discardHead(identifier: string): Promise<void> {
-    if (this.runtime === undefined) return;
-    await this.runtime.queue.discard(this.roomName(), identifier);
-    await this.keepDraft(null);
-    this.restoredHead = undefined;
-    this.conflictBaseline = undefined;
+  private async discardDraft(): Promise<void> {
+    if (!(await this.keepDraft(null))) return;
+    this.localRefusal = undefined;
     this.present();
   }
 
@@ -968,7 +877,9 @@ export class DocumentView extends HTMLElement {
     heading.textContent = 'Backlinks';
     const list = document.createElement('ul');
     list.className = 'links';
-    const entries = [...file.backlinks].sort((left, right) => left.path.localeCompare(right.path));
+    const entries = [...(file.backlinks ?? [])].sort((left, right) =>
+      left.path.localeCompare(right.path),
+    );
     for (const entry of entries) {
       const item = document.createElement('li');
       const control = document.createElement('button');

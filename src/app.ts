@@ -2,15 +2,21 @@ import type { HouseBridge } from '@agentshouse/app-bridge';
 import type {
   AppRoom,
   ConnectionRefusal,
-  DraftEntry,
+  Filter,
   MdType,
-  QueryDocument,
   QueueEntry,
+  RoomDraft,
 } from '@agentshouse/mdruntime';
-import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
+import type { MdRuntimeClient, Observation } from '@agentshouse/mdruntime/client';
 import { addressed, composeAddress, fileSuffix, parseAddress, type Addressed } from './address.js';
 import { adopt, appStyles } from './components/theme.js';
-import { mdTypes, observation, queueKinds, refusalParts } from './components/runtime.js';
+import {
+  mdTypes,
+  observation,
+  queueStates,
+  refusalParts,
+  returnedKinds,
+} from './components/runtime.js';
 import './components/status.js';
 import './components/view.js';
 
@@ -139,39 +145,19 @@ function fieldEquality(raw: string, kind: string | undefined): unknown {
   return raw;
 }
 
-function containsText(value: unknown, text: string): boolean {
-  if (typeof value === 'string') return value.includes(text);
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value).includes(text);
-  if (Array.isArray(value)) return value.some((item) => containsText(item, text));
-  return false;
-}
-
-function matchesSearch(file: QueryDocument, text: string): boolean {
-  if (text === '') return true;
-  for (const section of Object.values(file.sections)) {
-    if (section.includes(text)) return true;
-  }
-  for (const value of Object.values(file.fields)) {
-    if (containsText(value, text)) return true;
-  }
-  return false;
-}
-
-function searchSelector(form: HTMLFormElement, types: readonly MdType[]): Record<string, unknown> {
+function searchFilter(form: HTMLFormElement, types: readonly MdType[]): Filter {
   const data = new FormData(form);
   const room = String(data.get('room') ?? '');
   const type = String(data.get('type') ?? '');
   const field = String(data.get('field') ?? '');
   const value = String(data.get('value') ?? '');
-  const clauses: Record<string, unknown>[] = [];
-  if (room !== '') clauses.push({ room });
-  if (type !== '') clauses.push({ type });
-  if (field !== '') {
-    clauses.push({ [`fields.${field}`]: fieldEquality(value, fieldKind(types, field, type)) });
-  }
-  if (clauses.length === 0) return {};
-  if (clauses.length === 1) return clauses[0]!;
-  return { $and: clauses };
+  return {
+    ...(room === '' ? {} : { rooms: [room] }),
+    ...(type === '' ? {} : { types: [type] }),
+    ...(field === ''
+      ? {}
+      : { where: { [field]: fieldEquality(value, fieldKind(types, field, type)) as string } }),
+  };
 }
 
 function connectionRefusalText(refusal: ConnectionRefusal): string {
@@ -224,7 +210,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   let heldRefusal: ConnectionRefusal | null = null;
   let generation = 0;
   let runtimeStorage: string | null = null;
-  let presentationReadFault: string | null = null;
+  let observedPresentation: unknown = null;
   let presentationWriteFault: string | null = null;
 
   function cleanup(): void {
@@ -269,7 +255,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   async function documentHeld(locator: string, path: string): Promise<boolean> {
     const rooms = visibleRooms.length > 0 ? visibleRooms : await runtime.rooms();
     if (closed || !rooms.some((room) => room.locator === locator)) return false;
-    const result = await runtime.query({ selector: { room: locator } });
+    const result = await runtime.query({ rooms: [locator], select: {} });
     return !closed && result.documents.some((file) => file.path === path);
   }
 
@@ -289,7 +275,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   }
 
   async function writePresentation(): Promise<void> {
-    if (!addressed(current) || unresolved !== null || presentationReadFault !== null) return;
+    if (!addressed(current) || unresolved !== null) return;
     const value =
       openRoom !== undefined && openPath !== undefined
         ? { screen: current, room: openRoom, path: openPath }
@@ -383,15 +369,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
       return;
     }
     const token = generation;
-    let stored = null;
-    try {
-      stored = parsePresentation(await runtime.presentation.read());
-    } catch (error) {
-      stored = null;
-      const reason = error instanceof Error ? error.message : String(error);
-      presentationReadFault = `Presentation State could not be read: ${reason}`;
-      await presentStorage(runtimeStorage);
-    }
+    const stored = parsePresentation(observedPresentation);
     if (closed || freezeAddress() || token !== generation) return;
     if (stored !== null) {
       await restorePresentation(stored, token);
@@ -401,6 +379,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
   }
 
   async function followPresentation(value: unknown): Promise<void> {
+    observedPresentation = value;
     const token = generation;
     if (closed || freezeAddress() || current === 'refusal' || current === 'storage') return;
     const parsed = parseAddress(bridge.address() ?? '/');
@@ -436,7 +415,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
       rooms.map(async (room) => ({
         room,
         types: mdTypes(room.model),
-        paths: (await runtime.query({ selector: { room: room.locator } })).documents.map(
+        paths: (await runtime.query({ rooms: [room.locator], select: {} })).documents.map(
           (file) => file.path,
         ),
       })),
@@ -507,11 +486,23 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
     }
   }
 
-  function presentDrafts(drafts: readonly DraftEntry[]): void {
+  function presentDrafts(drafts: readonly RoomDraft[]): void {
     draftsPart.replaceChildren();
     for (const draft of drafts) {
       const item = document.createElement('li');
-      item.textContent = `${draft.locator} ${draft.path}`;
+      item.append(`${draft.room} ${draft.path}`);
+      if (draft.returned !== null) {
+        const state = document.createElement('p');
+        state.textContent = returnedKinds[draft.returned.kind];
+        item.append(state);
+        if ('code' in draft.returned) {
+          for (const part of refusalParts(draft.returned)) {
+            const text = document.createElement('p');
+            text.textContent = part;
+            item.append(text);
+          }
+        }
+      }
       draftsPart.append(item);
     }
     draftsState.textContent = drafts.length === 0 ? 'No Drafts.' : '';
@@ -523,7 +514,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
     draftsState.textContent = 'Loading Drafts…';
     retryDrafts.hidden = true;
     try {
-      const drafts = await runtime.draft.list();
+      const drafts = await runtime.roomDraft.list();
       if (requested !== draftRead) return;
       presentDrafts(drafts);
     } catch (error) {
@@ -545,19 +536,12 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
       for (const entry of queues.get(room.locator) ?? []) {
         const item = document.createElement('li');
         const kind = document.createElement('p');
-        kind.textContent = queueKinds[entry.outcome.kind];
+        kind.textContent = queueStates[entry.state];
         item.append(kind);
-        if (entry.outcome.kind === 'retryable-refusal' && entry.outcome.reset !== undefined) {
+        if (entry.state === 'reset') {
           const reset = document.createElement('p');
-          reset.textContent = entry.outcome.reset;
+          reset.textContent = entry.reset;
           item.append(reset);
-        }
-        if ('code' in entry.outcome) {
-          for (const part of refusalParts(entry.outcome)) {
-            const text = document.createElement('p');
-            text.textContent = part;
-            item.append(text);
-          }
         }
         list.append(item);
       }
@@ -572,12 +556,10 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
     queues.clear();
     for (const room of rooms) {
       queueStops.push(
-        observation(
-          runtime.observe('queue', room.locator, (entries) => {
-            queues.set(room.locator, entries);
-            if (current === 'work') presentQueues();
-          }),
-        ),
+        observation(runtime.observe('queue', room.locator), (entries) => {
+          queues.set(room.locator, entries);
+          if (current === 'work') presentQueues();
+        }),
       );
     }
   }
@@ -603,7 +585,7 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
     runtimeStorage = statement;
     const persistence = await runtime.persistence();
     if (closed) return;
-    const parts = [runtimeStorage, presentationReadFault, presentationWriteFault].filter(
+    const parts = [runtimeStorage, presentationWriteFault].filter(
       (part): part is string => typeof part === 'string' && part.length > 0,
     );
     storagePart.textContent = `${parts.length === 0 ? 'No storage loss.' : parts.join(' ')} ${String(persistence)}`;
@@ -635,11 +617,10 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
       const types: MdType[] = [];
       for (const room of visibleRooms) types.push(...mdTypes(room.model));
       const text = String(new FormData(form).get('text') ?? '');
-      const result = await runtime.query({ selector: searchSelector(form, types) });
+      const result = await runtime.search({ text, documents: searchFilter(form, types) });
       if (closed || requested !== searchRead) return;
       resultsPart.replaceChildren();
       for (const file of result.documents) {
-        if (!matchesSearch(file, text)) continue;
         const item = document.createElement('li');
         const button = document.createElement('button');
         button.type = 'button';
@@ -673,46 +654,46 @@ export async function bindApp(runtime: MdRuntimeClient, bridge: HouseBridge): Pr
     void go('file', { room: detail.room, path: detail.path });
   });
 
-  async function hold(start: Promise<() => void>): Promise<void> {
-    const end = await start;
+  async function hold<T>(
+    start: Promise<Observation<T>>,
+    receive: (value: T) => void,
+  ): Promise<void> {
+    const handle = await start;
     if (closed) {
-      end();
+      handle.close();
       return;
     }
-    stops.push(end);
+    receive(handle.current());
+    const unsubscribe = handle.subscribe(receive);
+    stops.push(() => {
+      unsubscribe();
+      handle.close();
+    });
   }
 
+  await hold(runtime.observe('connection-refusal'), presentRefusal);
+  if ((heldRefusal as ConnectionRefusal | null)?.reason === 'client-host-protocol-mismatch')
+    return cleanup;
   await Promise.all([
-    hold(
-      runtime.observe('rooms', (rooms) => {
-        void presentRooms(rooms);
-        watchQueues(rooms);
-        if (current === 'work') presentQueues();
-      }),
-    ),
-    hold(
-      runtime.observe('query', {}, () => {
-        void presentRooms(visibleRooms);
-      }),
-    ),
-    hold(
-      runtime.observe('drafts', (drafts) => {
-        draftRead += 1;
-        presentDrafts(drafts);
-      }),
-    ),
-    hold(runtime.observe('connection-refusal', presentRefusal)),
-    hold(runtime.observe('storage-loss', (statement) => void presentStorage(statement))),
-    hold(
-      runtime.observe('presentation', (value) => {
-        void followPresentation(value);
-      }),
-    ),
-    hold(
-      runtime.observe('sync-status', () => {
-        if (current === 'log') void presentLog();
-      }),
-    ),
+    hold(runtime.observe('rooms'), (rooms) => {
+      void presentRooms(rooms);
+      watchQueues(rooms);
+      if (current === 'work') presentQueues();
+    }),
+    hold(runtime.observe('query', { select: {} }), () => {
+      void presentRooms(visibleRooms);
+    }),
+    hold(runtime.observe('room-drafts'), (drafts) => {
+      draftRead += 1;
+      presentDrafts(drafts);
+    }),
+    hold(runtime.observe('storage-loss'), (statement) => void presentStorage(statement)),
+    hold(runtime.observe('presentation'), (value) => {
+      void followPresentation(value);
+    }),
+    hold(runtime.observe('sync-status'), () => {
+      if (current === 'log') void presentLog();
+    }),
   ]);
 
   const address = await currentAddress(bridge);

@@ -134,19 +134,19 @@ The browser specifications own App loading, the Markdown renderer, field
 controls, Document View, the Sync Status indicator, and the seven screens of
 main over the published in-memory Adapter. They exercise actual native
 interaction, value and validity events, same-Room reference choices, list
-updates, locale, visible focus, disabled states, and 360px light/dark layout. Document View covers Query
-text parts, Room-local backlinks, lazy History at the public Adapter fixture
-boundary, visible refusal reasons, Draft and Save through the public Runtime
-surfaces, in-progress editor Draft persistence, relative reference storage,
-structural changes with whole-text, grant revocation, complete Markdown from
-Query `content`, exact whole-file Save and cancel, and a Conflicted or
-Rejected head. The indicator covers Observe states,
-attention, last completed synchronization, and Pending while unreachable.
+updates, locale, visible focus, disabled states, and 360px light/dark layout.
+Document View covers selected Query parts, Room-local backlinks, lazy History
+at the public Adapter fixture boundary, visible refusal reasons, Room Draft
+field, section, whole-Markdown and creation writes, Save consumption into the
+Room queue, cancel and discard, and grant revocation. The indicator covers
+Observation handles, returned Room Draft attention, last completed
+synchronization, and Pending while unreachable.
 The screen seam covers Rooms with MD Types and file tree, including the tree
 after a local structural Save while the Provider is unreachable, File through
 Document View, Local Search over section text and field values narrowed by
 Room, MD Type, and one field value including a number and an empty string,
-Work's public Draft inventory and per-Room queues with Provider text,
+Work's public Room Draft inventory, returned Provider reasons, and per-Room
+queues,
 Connection Refusal with re-authorization, the storage-loss statement, and
 synchronization log export, plus keyboard operation of labelled screen
 controls, 360px and desktop layout, and light and dark themes.
@@ -154,23 +154,17 @@ The address and Presentation State seam runs over the client entry against the
 host entry serving the in-memory Adapter, with `@agentshouse/app-bridge/test-host`
 playing the shell: a delivered address opens File or names an unresolved
 address on Rooms, user moves push and Back/Forward land, Presentation State is
-observed on a second port of the same App, a reload without an address below
-the App's path restores it, and a delivered address wins over Presentation
-State even when restore is still reading. A later delivery wins over an earlier
-File resolution still in flight. Paths encode for a space or `#`. A second tab
-with no address below the App path follows Presentation State. Re-applying the
-current address does not hide Storage or a live Connection Refusal. The open
-file remains in Presentation State when the screen is not File.
-The Work specification exercises absent-Path creations, unchanged-Path content
-changes, remote removal and Room access loss, navigation and literal reload,
-same-tab and cross-tab Draft and queue convergence, Save consumption, and
-discard. Browser storage-operation exceptions exercise failed reads, writes,
-and Save without reading private stores. Read failure, keyboard retry, durable
-Save refusal, Pending batches, reopened Conflicted or Rejected Drafts, Accepted
-batch removal, and actual storage eviction have distinct assertions. This is
-public Runtime integration over the Memory Adapter, not live Building acceptance.
-Repeated unchanged Room notifications are observed while a native File field is
-being typed into; the field keeps its value and focus until the user commits it.
+followed through its Observation handle on a second port of the same App, and
+a reload without an address below the App's path restores it. A later delivery
+wins over an earlier File resolution still in flight. Paths encode for a space
+or `#`. A second tab with no address below the App path follows Presentation
+State. Re-applying the current address does not hide Storage or a live
+Connection Refusal. The open file remains in Presentation State when the
+screen is not File, and failed Presentation State writes remain visible until
+a retry succeeds. The Work specification exercises live Room Draft inventory,
+Save consumption into a submitted Change Batch, Provider-returned drafts, and
+discard. This is public Runtime integration over the Memory Adapter, not live
+Building acceptance.
 The renderer seam also
 accepts adversarial text directly through its public property, independently
 of Model collection validity; normal section input is read through Query.

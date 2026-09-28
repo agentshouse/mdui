@@ -9,16 +9,7 @@ import {
   type HouseBridgeNavigation,
   type HouseBridgeTestHost,
 } from '@agentshouse/app-bridge/test-host';
-import { parse, validate } from '@agentshouse/mdmodel';
-import { query } from '@agentshouse/query';
-import type {
-  AttachedModelBinding,
-  MdRuntimeOptions,
-  MdType,
-  ModelResult,
-  QueryBinding,
-  RuntimeShell,
-} from '@agentshouse/mdruntime';
+import type { MdRuntimeOptions, ModelResult, RuntimeShell } from '@agentshouse/mdruntime';
 import {
   connectMdRuntime,
   type MdRuntimeClient,
@@ -46,57 +37,21 @@ export function fixtureModel(
   return { kind: 'model', snapshot: { identity, version, definitions } };
 }
 
-export const fixtureBinding: AttachedModelBinding = {
-  verify(snapshot) {
-    const verdict = validate(snapshot.definitions);
-    if (verdict.verdict === 'refuse') return { kind: 'invalid' };
-    const types: MdType[] = [];
-    for (const [path, content] of Object.entries(snapshot.definitions).sort(([left], [right]) =>
-      left.localeCompare(right),
-    )) {
-      const parsed = parse(content, path);
-      if (!parsed.ok) return { kind: 'invalid' };
-      types.push({
-        name: path.slice(path.lastIndexOf('/') + 1, -3),
-        path,
-        fields: (parsed.document.fields.fields ?? {}) as MdType['fields'],
-        sections: (parsed.document.fields.sections ?? {}) as MdType['sections'],
-      });
-    }
-    return { kind: 'verified', types };
-  },
-  validate({ model, documents, binaryTargets }) {
-    const verdict = validate({ ...documents, ...model.definitions }, { binaryTargets });
-    return verdict.verdict === 'accept'
-      ? verdict
-      : {
-          ...verdict,
-          source: Object.hasOwn(model.definitions, verdict.file) ? 'model' : 'content',
-        };
-  },
-};
-
-export const fixtureQuery: QueryBinding = (rooms, options) => {
-  const definitions = new Set<string>();
-  const projected = rooms.map((room) => {
-    const documents = { ...room.documents };
-    if (room.model.status !== 'unavailable') {
-      for (const type of room.model.types) definitions.add(type.path);
-    }
-    return { ...room, documents };
-  });
-  return query(projected, {
-    ...options,
-    selector: { $and: [options.selector ?? {}, { path: { $nin: [...definitions] } }] },
-  });
-};
-
 export function fixtureRoom(room: FixtureRoom): MemoryRoom {
   const definitions = Object.fromEntries(
     Object.entries(room.documents).filter(
       ([path]) => path.startsWith('types/') && path.endsWith('.md'),
     ),
   );
+  const documents = Object.fromEntries(
+    Object.entries(room.documents).filter(([path]) => !Object.hasOwn(definitions, path)),
+  );
+  const revisions =
+    room.revisions === undefined
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(room.revisions).filter(([path]) => !Object.hasOwn(definitions, path)),
+        );
   const model = Object.keys(definitions).length === 0 ? null : `${room.locator}-models`;
   const write = room.writeGrants ?? [];
   return {
@@ -108,8 +63,8 @@ export function fixtureRoom(room: FixtureRoom): MemoryRoom {
     replica: { selection: 'fixture-selection', admission: 'admitted' },
     attachedModel: model === null ? null : { identity: model, version: 'model-1' },
     providerOwnedPaths: room.providerOwnedPaths ?? [],
-    documents: room.documents,
-    revisions: room.revisions,
+    documents,
+    revisions,
     binaryTargets: room.binaryTargets,
     ...(model === null ? {} : { model: fixtureModel(model, definitions) }),
   };
@@ -129,12 +84,6 @@ export function fixtureShell(reported: { persistentStorage?: boolean } = {}): Ru
     },
   };
   return kept;
-}
-
-export function runtimeOptions(
-  options: Omit<MdRuntimeOptions, 'modelBinding' | 'queryBinding'>,
-): MdRuntimeOptions {
-  return { ...options, modelBinding: fixtureBinding, queryBinding: fixtureQuery };
 }
 
 export type TestBridgeHost = Pick<HouseBridgeTestHost, 'port' | 'navigations' | 'address' | 'open'>;
@@ -218,20 +167,18 @@ export async function waitForRooms(
   runtime: MdRuntimeClient,
   matches: (rooms: Awaited<ReturnType<MdRuntimeClient['rooms']>>) => boolean,
 ): Promise<void> {
-  let stop: (() => void) | undefined;
-  let done = false;
-  await new Promise<void>((resolve, reject) => {
-    void runtime
-      .observe('rooms', (rooms) => {
-        if (done || !matches(rooms)) return;
-        done = true;
-        stop?.();
-        resolve();
-      })
-      .then((end) => {
-        stop = end;
-        if (done) end();
-      }, reject);
+  const handle = await runtime.observe('rooms');
+  if (matches(handle.current())) {
+    handle.close();
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const unsubscribe = handle.subscribe((rooms) => {
+      if (!matches(rooms)) return;
+      unsubscribe();
+      handle.close();
+      resolve();
+    });
   });
 }
 
@@ -258,9 +205,7 @@ function trackedPort(port: MessagePort): { port: RuntimePort; live: () => number
 
 export async function openTestRuntime(
   adapter: MemoryAdapter,
-  options: Partial<
-    Omit<MdRuntimeOptions, 'adapter' | 'modelBinding' | 'queryBinding' | 'shell'>
-  > & {
+  options: Partial<Omit<MdRuntimeOptions, 'adapter' | 'shell'>> & {
     shell?: RuntimeShell;
     app?: string;
   } = {},
@@ -273,15 +218,13 @@ export async function openTestRuntime(
 }> {
   const owned = options.signal === undefined ? new AbortController() : undefined;
   const shell = options.shell ?? fixtureShell();
-  const host = serveMdRuntime(
-    runtimeOptions({
-      adapter,
-      requiredGuarantees: options.requiredGuarantees ?? [],
-      discoveryIntervalMs: options.discoveryIntervalMs,
-      signal: options.signal ?? owned!.signal,
-      shell,
-    }),
-  );
+  const host = serveMdRuntime({
+    adapter,
+    requiredGuarantees: options.requiredGuarantees ?? [],
+    discoveryIntervalMs: options.discoveryIntervalMs,
+    signal: options.signal ?? owned!.signal,
+    shell,
+  });
   const channel = new MessageChannel();
   const tracked = trackedPort(channel.port2);
   const detach = host.attach(channel.port1, options.app ?? 'mdui');
