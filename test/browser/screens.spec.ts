@@ -56,7 +56,11 @@ const archive = {
 async function start(
   page: Page,
   rooms: unknown[] = [studio, archive],
-  options: { requiredGuarantees?: string[]; discoveryIntervalMs?: number } = {},
+  options: {
+    requiredGuarantees?: string[];
+    discoveryIntervalMs?: number;
+    draftListFailures?: number;
+  } = {},
 ) {
   await page.goto('/');
   await page.evaluate(
@@ -76,9 +80,28 @@ async function start(
         requiredGuarantees: options.requiredGuarantees ?? [],
         discoveryIntervalMs: options.discoveryIntervalMs ?? 60_000,
       });
-      const unbind = await bindApp(opened.runtime, openTestBridge().bridge);
+      let draftListFailures = options.draftListFailures ?? 0;
+      const runtime = new Proxy(opened.runtime, {
+        get(target, property, receiver) {
+          if (property === 'roomDraft' && draftListFailures > 0) {
+            return {
+              ...target.roomDraft,
+              list() {
+                if (draftListFailures > 0) {
+                  draftListFailures -= 1;
+                  return Promise.reject(new Error('injected-room-draft-list-failure'));
+                }
+                return target.roomDraft.list();
+              },
+            };
+          }
+          const value = Reflect.get(target, property, receiver);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      const unbind = await bindApp(runtime, openTestBridge().bridge);
       window.screensFixture = {
-        runtime: opened.runtime,
+        runtime,
         adapter,
         stop: opened.stop,
         liveObservations: opened.liveObservations,
@@ -87,7 +110,7 @@ async function start(
       };
       if ((options.requiredGuarantees ?? []).length > 0) return;
       await waitForRooms(
-        opened.runtime,
+        runtime,
         (visible: readonly { roomVersion: string | null }[]) =>
           visible.length === rooms.length && visible.every((room) => room.roomVersion !== null),
       );
@@ -212,13 +235,14 @@ test('Search finds files through Local Search narrowed by Room, MD Type, and one
 
   await search.getByRole('combobox', { name: 'Room' }).selectOption({ value: '' });
   await search.getByRole('combobox', { name: 'MD Type' }).selectOption({ value: '' });
-  await search.getByLabel('Find').fill('');
+  await search.getByLabel('Find').fill('numeric');
   await search.getByRole('combobox', { name: 'Field' }).selectOption({ value: 'count' });
   await search.getByRole('textbox', { name: 'Value' }).fill('42');
   await page.getByRole('button', { name: 'Find files' }).click();
   await expect(results.getByRole('button', { name: 'studio notes/counted.md' })).toBeVisible();
   await expect(results.getByRole('button', { name: 'studio notes/hello.md' })).toHaveCount(0);
 
+  await search.getByLabel('Find').fill('empty tag');
   await search.getByRole('combobox', { name: 'Field' }).selectOption({ value: 'tag' });
   await search.getByRole('textbox', { name: 'Value' }).fill('');
   await page.getByRole('button', { name: 'Find files' }).click();
@@ -242,9 +266,11 @@ test('Work lists Drafts across Rooms and Pending Change queues with Provider tex
   await start(page);
   await page.evaluate(async (other) => {
     const { runtime, adapter } = window.screensFixture;
-    await runtime.draft.replace('studio', 'notes/hello.md', { fields: { title: 'Draft Hello' } });
-    await runtime.draft.replace('archive', 'notes/hello.md', {
-      fields: { title: 'Archived draft' },
+    await runtime.roomDraft.write('studio', 'notes/hello.md', null, {
+      fields: { title: { value: 'Draft Hello', base: { value: 'Hello' } } },
+    });
+    await runtime.roomDraft.write('archive', 'notes/hello.md', null, {
+      fields: { title: { value: 'Archived draft', base: { value: 'Hello' } } },
     });
     adapter.script('mutate', {
       kind: 'conflicted',
@@ -253,8 +279,13 @@ test('Work lists Drafts across Rooms and Pending Change queues with Provider tex
       code: 'title_conflict',
       fields: { detail: 'title was changed on the Provider' },
     });
+    const written = await runtime.roomDraft.write('studio', 'notes/other.md', null, {
+      fields: { title: { value: 'Changed', base: { value: 'Other' } } },
+    });
+    if (written.outcome !== 'written' || written.roomDraft === null)
+      throw new Error(JSON.stringify(written));
     const result = await runtime.save('studio', [
-      { kind: 'field', path: 'notes/other.md', name: 'title', value: 'Changed' },
+      { path: written.roomDraft.path, revision: written.roomDraft.revision },
     ]);
     if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
   }, studio.documents['notes/other.md']);
@@ -265,12 +296,22 @@ test('Work lists Drafts across Rooms and Pending Change queues with Provider tex
   const drafts = page.getByRole('list', { name: 'Drafts' });
   await expect(drafts.getByText('studio notes/hello.md', { exact: true })).toBeVisible();
   await expect(drafts.getByText('archive notes/hello.md', { exact: true })).toBeVisible();
-  await expect(page.getByRole('article', { name: 'Studio Pending Changes' })).toContainText(
-    'title_conflict',
+  await expect(drafts).toContainText('title_conflict');
+  await expect(drafts).toContainText('title was changed on the Provider');
+});
+
+test('Work names a failed Room Draft list and Retry restores the inventory', async ({ page }) => {
+  await start(page, [studio, archive], { draftListFailures: 1 });
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Work' })
+    .click();
+  await expect(page.getByRole('status', { name: 'Draft inventory' })).toContainText(
+    'Drafts could not be read: injected-room-draft-list-failure',
   );
-  await expect(page.getByRole('article', { name: 'Studio Pending Changes' })).toContainText(
-    'title was changed on the Provider',
-  );
+  await page.getByRole('button', { name: 'Retry Drafts' }).click();
+  await expect(page.getByRole('status', { name: 'Draft inventory' })).toHaveText('No Drafts.');
+  await expect(page.getByRole('button', { name: 'Retry Drafts' })).toBeHidden();
 });
 
 test('Rooms file tree follows a local structural Save while discovery is idle', async ({
@@ -285,7 +326,17 @@ test('Rooms file tree follows a local structural Save while discovery is idle', 
     adapter.script('mutate', { kind: 'transport-uncertainty' });
     adapter.script('discover', { kind: 'transport-uncertainty' });
     adapter.script('refresh', { kind: 'transport-uncertainty' });
-    const result = await runtime.save('studio', [{ kind: 'remove', path: 'notes/other.md' }]);
+    const document = (
+      await runtime.query({ rooms: ['studio'], select: { markdown: true } })
+    ).documents.find(({ path }) => path === 'notes/other.md');
+    const written = await runtime.roomDraft.write('studio', 'notes/other.md', null, {
+      removal: { base: document?.markdown ?? null },
+    });
+    if (written.outcome !== 'written' || written.roomDraft === null)
+      throw new Error(JSON.stringify(written));
+    const result = await runtime.save('studio', [
+      { path: written.roomDraft.path, revision: written.roomDraft.revision },
+    ]);
     if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
   });
   await expect(
@@ -300,8 +351,13 @@ test('Refusal shows a revoked Connection Refusal and re-authorization restores t
   await page.evaluate(async () => {
     const { runtime, adapter } = window.screensFixture;
     adapter.script('discover', { kind: 'revoked-authorization' });
+    const written = await runtime.roomDraft.write('studio', 'notes/hello.md', null, {
+      fields: { title: { value: 'Trigger discovery', base: { value: 'Hello' } } },
+    });
+    if (written.outcome !== 'written' || written.roomDraft === null)
+      throw new Error(JSON.stringify(written));
     const result = await runtime.save('studio', [
-      { kind: 'field', path: 'notes/hello.md', name: 'title', value: 'Trigger discovery' },
+      { path: written.roomDraft.path, revision: written.roomDraft.revision },
     ]);
     if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
   });
@@ -329,8 +385,8 @@ test('Storage shows the Runtime storage-loss statement after durable state is ev
   await start(page);
   await page.evaluate(
     async (rooms) => {
-      await window.screensFixture.runtime.draft.replace('studio', 'notes/hello.md', {
-        fields: { title: 'Unsaved' },
+      await window.screensFixture.runtime.roomDraft.write('studio', 'notes/hello.md', null, {
+        fields: { title: { value: 'Unsaved', base: { value: 'Hello' } } },
       });
       window.screensFixture.stop();
       const names = (await indexedDB.databases())
@@ -384,7 +440,7 @@ test('Storage shows the Runtime storage-loss statement after durable state is ev
     .getByRole('button', { name: 'Storage' })
     .click();
   await expect(page.getByRole('status', { name: 'Storage' })).toHaveText(
-    'Unsynchronized Drafts and Pending Changes were lost. true',
+    'Unsynchronized Room Drafts and Pending Changes were lost. true',
   );
   await page
     .getByRole('navigation', { name: 'Screens' })

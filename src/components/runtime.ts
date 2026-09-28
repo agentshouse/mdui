@@ -1,18 +1,27 @@
 import type { MdType, TypesResult } from '@agentshouse/mdruntime';
+import type { Observation } from '@agentshouse/mdruntime/client';
 
 export function mdTypes(result: TypesResult | undefined): readonly MdType[] {
   return result === undefined || result.status === 'unavailable' ? [] : result.types;
 }
 
-export function observation(start: Promise<() => void>): () => void {
+export function observation<T>(
+  start: Promise<Observation<T>>,
+  receive: (value: T) => void,
+): () => void {
   let stop: (() => void) | undefined;
   let closed = false;
-  void start.then((end) => {
+  void start.then((handle) => {
     if (closed) {
-      end();
+      handle.close();
       return;
     }
-    stop = end;
+    receive(handle.current());
+    const unsubscribe = handle.subscribe(receive);
+    stop = () => {
+      unsubscribe();
+      handle.close();
+    };
   });
   return () => {
     closed = true;
@@ -20,12 +29,17 @@ export function observation(start: Promise<() => void>): () => void {
   };
 }
 
-export const queueKinds = {
-  pending: 'Pending',
+export const returnedKinds = {
   conflicted: 'Conflicted',
   rejected: 'Rejected',
   expired: 'Expired',
-  'retryable-refusal': 'Pending',
+  withdrawn: 'Withdrawn',
+} as const;
+
+export const queueStates = {
+  waiting: 'Waiting',
+  submitted: 'Submitted',
+  reset: 'Reset',
 } as const;
 
 export function refusalParts(refusal: {

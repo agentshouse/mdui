@@ -1,6 +1,6 @@
 # 01-bundle-build-agent-instructions-and-release - Bundle build, agent instructions, and release
 
-Status: ready-for-human
+Status: resolved
 
 ## Frame
 
@@ -38,7 +38,7 @@ Creator would.
       content and the MIT license file.
 - [x] The neutrality lane is green on main, and the bundle sends no
       telemetry.
-- [ ] Main, built by House from its committed tree and served at its own
+- [x] Main, built by House from its committed tree and served at its own
       path on the control origin, runs over the host's Runtime under the App
       Creator's own Account on the dev Building, with no App-chosen origin
       and no Adapter package consumed by main: Rooms, Search, File with

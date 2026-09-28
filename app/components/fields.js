@@ -250,7 +250,7 @@ export class ListField extends FieldControl {
         this.add.onclick = ()=>{
             this.currentValue = [
                 ...Array.isArray(this.currentValue) ? this.currentValue : [],
-                this.definition.of === 'string' ? '' : undefined
+                this.definition.of?.kind === 'string' ? '' : undefined
             ];
             this.writeValue();
             this.presentValidity();
@@ -266,10 +266,12 @@ export class ListField extends FieldControl {
         this.group.replaceChildren(this.legend);
         if (this.definition && Array.isArray(this.currentValue)) {
             for (const [index, value] of this.currentValue.entries()){
-                const item = document.createElement(`md-${this.definition.of}-field`);
+                const item = document.createElement(`md-${this.definition.of.kind}-field`);
                 item[configure](this.runtime, this.room, this.fieldName, {
-                    ...this.definition,
-                    kind: this.definition.of,
+                    ...this.definition.of,
+                    ...this.definition.to === undefined ? {} : {
+                        to: this.definition.to
+                    },
                     required: true
                 });
                 item.value = value;
@@ -334,26 +336,31 @@ export class ReferenceField extends EnumField {
     }
     queryOptions() {
         return {
-            selector: {
-                room: this.room,
-                ...this.definition.to === 'any' ? {} : {
-                    type: this.definition.to
-                }
+            rooms: [
+                this.room
+            ],
+            ...this.definition.to === 'any' ? {} : {
+                types: [
+                    this.definition.to
+                ]
             },
-            sort: {
-                path: 1
-            }
+            select: {},
+            orderBy: [
+                {
+                    by: 'path'
+                }
+            ]
         };
     }
     watch() {
         this.unobserve?.();
         this.unobserve = undefined;
         if (this.isConnected && this.definition && this.runtime !== undefined) {
-            this.unobserve = observation(this.runtime.observe('query', this.queryOptions(), (result)=>{
+            this.unobserve = observation(this.runtime.observe('query', this.queryOptions()), (result)=>{
                 this.paths = result.documents.map((document1)=>document1.path);
                 this.writeValue();
                 this.presentValidity();
-            }));
+            });
         }
     }
 }

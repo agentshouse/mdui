@@ -11,7 +11,6 @@ declare global {
     houseBridgeComplete?: (port: unknown) => void;
     addressOther?: Window | null;
     addressRuntimePort?: Promise<MessagePort>;
-    releasePresentationRead?: () => void;
     addressFixture: {
       runtime: MdRuntimeClient;
       runtimeHost?: MdRuntimeHost;
@@ -22,7 +21,6 @@ declare global {
       stop: () => void;
       unbind: () => void;
       seen: unknown[];
-      openAt?: number;
     };
   }
 }
@@ -173,12 +171,10 @@ async function remount(
   page: Page,
   address: string,
   options: {
-    read?: string;
-    readOnce?: string;
     write?: string;
     writeOnce?: string;
-    duringRead?: string;
     verbatim?: boolean;
+    deliveredWhilePresentationPending?: string;
   } = {},
 ) {
   await page.evaluate(
@@ -197,35 +193,24 @@ async function remount(
       const detach = runtimeHost.attach(channel.port1, 'mdui');
       const connected = connectMdRuntime(channel.port2);
       const proxy =
-        options.read !== undefined ||
-        options.readOnce !== undefined ||
         options.write !== undefined ||
         options.writeOnce !== undefined ||
-        options.duringRead !== undefined;
-      let readStarted = false;
-      let readOnce = options.readOnce;
+        options.deliveredWhilePresentationPending !== undefined;
       let writeOnce = options.writeOnce;
+      let releasePresentation: () => void = () => undefined;
+      let markPresentationStarted: () => void = () => undefined;
+      const presentationRelease = new Promise<void>((resolve) => {
+        releasePresentation = resolve;
+      });
+      const presentationStarted = new Promise<void>((resolve) => {
+        markPresentationStarted = resolve;
+      });
       const runtime = proxy
         ? new Proxy(connected, {
             get(target, prop, receiver) {
               if (prop === 'presentation') {
                 return {
-                  async read() {
-                    if (options.read !== undefined) throw new Error(options.read);
-                    if (readOnce !== undefined) {
-                      const reason = readOnce;
-                      readOnce = undefined;
-                      throw new Error(reason);
-                    }
-                    const value = await target.presentation.read();
-                    if (options.duringRead !== undefined) {
-                      readStarted = true;
-                      await new Promise<void>((resolve) => {
-                        window.releasePresentationRead = resolve;
-                      });
-                    }
-                    return value;
-                  },
+                  read: () => target.presentation.read(),
                   write(value: unknown) {
                     if (options.write !== undefined) {
                       return Promise.reject(new Error(options.write));
@@ -239,6 +224,15 @@ async function remount(
                   },
                 };
               }
+              if (prop === 'observe' && options.deliveredWhilePresentationPending !== undefined) {
+                return async (name: string, ...input: unknown[]) => {
+                  if (name === 'presentation') {
+                    markPresentationStarted();
+                    await presentationRelease;
+                  }
+                  return Reflect.apply(target.observe, target, [name, ...input]);
+                };
+              }
               const value = Reflect.get(target, prop, receiver);
               return typeof value === 'function' ? value.bind(target) : value;
             },
@@ -246,16 +240,10 @@ async function remount(
         : connected;
       const { host, bridge } = openTestBridge(address, { verbatim: options.verbatim === true });
       const bound = bindApp(runtime, bridge);
-      let openAt = 0;
-      if (options.duringRead !== undefined) {
-        const started = Date.now();
-        while (!readStarted) {
-          if (Date.now() - started > 5000) throw new Error('presentation.read did not start');
-          await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-        openAt = host.navigations.length;
-        host.open(options.duringRead);
-        window.releasePresentationRead?.();
+      if (options.deliveredWhilePresentationPending !== undefined) {
+        await presentationStarted;
+        host.open(options.deliveredWhilePresentationPending);
+        releasePresentation();
       }
       const next = await bound;
       window.addressFixture = {
@@ -272,7 +260,6 @@ async function remount(
         },
         unbind: next,
         seen: [],
-        openAt,
       };
       await waitForRooms(
         connected,
@@ -297,9 +284,9 @@ test('Presentation State is observed, restored without an address, and yields to
     const other = connectMdRuntime(channel.port2);
     const seen: unknown[] = [];
     window.addressFixture.seen = seen;
-    await other.observe('presentation', (value) => {
-      seen.push(value);
-    });
+    const presentation = await other.observe('presentation');
+    seen.push(presentation.current());
+    presentation.subscribe((value) => seen.push(value));
   });
   await page
     .getByRole('article', { name: 'Studio' })
@@ -397,7 +384,7 @@ test('a restore without an address yields to one the shell delivers afterwards',
   );
 });
 
-test('a restore does not clobber an address delivered while presentation is still being read', async ({
+test('a delivered address wins while the Presentation State observation is opening', async ({
   page,
 }) => {
   await start(page);
@@ -405,21 +392,15 @@ test('a restore does not clobber an address delivered while presentation is stil
     .getByRole('article', { name: 'Studio' })
     .getByRole('button', { name: 'notes/hello.md' })
     .click();
+  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
+  await remount(page, '/', {
+    deliveredWhilePresentationPending: '/file/studio/notes/other.md',
+  });
   await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
-  await remount(page, '/', { duringRead: '/file/studio/notes/other.md' });
   await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Other');
-  expect(
-    await page.evaluate(() => {
-      const openAt = window.addressFixture.openAt;
-      if (openAt === undefined) throw new Error('remount did not record the delivery');
-      return {
-        address: window.addressFixture.host.address(),
-        replaced: window.addressFixture.host.navigations.slice(openAt).some((entry) => {
-          return entry.mode === 'replace' && entry.address === '/file/studio/notes/hello.md';
-        }),
-      };
-    }),
-  ).toEqual({ address: '/file/studio/notes/other.md', replaced: false });
+  expect(await page.evaluate(() => window.addressFixture.host.address())).toBe(
+    '/file/studio/notes/other.md',
+  );
 });
 
 test('a remainder that names the Work screen opens Work', async ({ page }) => {
@@ -600,8 +581,17 @@ test('re-applying the current address does not hide Storage or a live Refusal', 
     .click();
   await expect(page.getByRole('heading', { level: 1, name: 'Storage' })).toBeVisible();
   await page.evaluate(async () => {
-    const result = await window.addressFixture.runtime.save('studio', [
-      { kind: 'remove', path: 'notes/other.md' },
+    const runtime = window.addressFixture.runtime;
+    const document = (
+      await runtime.query({ rooms: ['studio'], select: { markdown: true } })
+    ).documents.find(({ path }) => path === 'notes/other.md');
+    const written = await runtime.roomDraft.write('studio', 'notes/other.md', null, {
+      removal: { base: document?.markdown ?? null },
+    });
+    if (written.outcome !== 'written' || written.roomDraft === null)
+      throw new Error(JSON.stringify(written));
+    const result = await runtime.save('studio', [
+      { path: written.roomDraft.path, revision: written.roomDraft.revision },
     ]);
     if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
   });
@@ -611,8 +601,23 @@ test('re-applying the current address does not hide Storage or a live Refusal', 
     const adapter = window.addressFixture.adapter;
     if (adapter === undefined) throw new Error('The Adapter is missing.');
     adapter.script('discover', { kind: 'revoked-authorization' });
-    const result = await window.addressFixture.runtime.save('studio', [
-      { kind: 'field', path: 'notes/hello.md', name: 'title', value: 'Trigger discovery' },
+    const runtime = window.addressFixture.runtime;
+    const document = (
+      await runtime.query({ rooms: ['studio'], select: { fields: ['title'] } })
+    ).documents.find(({ path }) => path === 'notes/hello.md');
+    const title = document?.fields?.title;
+    const written = await runtime.roomDraft.write('studio', 'notes/hello.md', null, {
+      fields: {
+        title: {
+          value: 'Trigger discovery',
+          base: title === undefined ? null : { value: title },
+        },
+      },
+    });
+    if (written.outcome !== 'written' || written.roomDraft === null)
+      throw new Error(JSON.stringify(written));
+    const result = await runtime.save('studio', [
+      { path: written.roomDraft.path, revision: written.roomDraft.revision },
     ]);
     if (result.outcome !== 'saved') throw new Error(JSON.stringify(result));
   });
@@ -761,64 +766,6 @@ test('navigating to a different document drops query and fragment', async ({ pag
   ]);
 });
 
-test('a failed presentation read reports Storage and does not restore the last screen', async ({
-  page,
-}) => {
-  await start(page);
-  await page
-    .getByRole('article', { name: 'Studio' })
-    .getByRole('button', { name: 'notes/hello.md' })
-    .click();
-  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
-  await remount(page, '/', { read: 'Injected presentation read failure' });
-  await page
-    .getByRole('navigation', { name: 'Screens' })
-    .getByRole('button', { name: 'Storage' })
-    .click();
-  await expect(page.getByRole('status', { name: 'Storage' })).toContainText(
-    'Presentation State could not be read: Injected presentation read failure',
-  );
-  expect(await page.evaluate(() => window.addressFixture.runtime.storageLoss())).toBeNull();
-});
-
-test('a failed presentation read applies the address without overwriting the unread File', async ({
-  page,
-}) => {
-  await start(page);
-  await page
-    .getByRole('article', { name: 'Studio' })
-    .getByRole('button', { name: 'notes/hello.md' })
-    .click();
-  await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
-  await remount(page, '/', { readOnce: 'Injected presentation read failure' });
-  await page
-    .getByRole('navigation', { name: 'Screens' })
-    .getByRole('button', { name: 'Storage' })
-    .click();
-  await expect(page.getByRole('status', { name: 'Storage' })).toContainText(
-    'Presentation State could not be read: Injected presentation read failure',
-  );
-  await page.evaluate(() => window.addressFixture.host.open('/search'));
-  await expect(page.getByRole('heading', { level: 1, name: 'Search' })).toBeVisible();
-  expect(
-    await page.evaluate(async () => {
-      const runtimeHost = window.addressFixture.runtimeHost;
-      if (runtimeHost === undefined) throw new Error('The Runtime host is missing.');
-      const channel = new MessageChannel();
-      const detach = runtimeHost.attach(channel.port1, 'mdui');
-      const { connectMdRuntime } = await import('@agentshouse/mdruntime/client');
-      const other = connectMdRuntime(channel.port2);
-      try {
-        return await other.presentation.read();
-      } finally {
-        detach();
-        channel.port1.close();
-        channel.port2.close();
-      }
-    }),
-  ).toEqual({ screen: 'file', room: 'studio', path: 'notes/hello.md' });
-});
-
 test('a failed presentation write reports Storage and still opens the file', async ({ page }) => {
   await start(page);
   await remount(page, '/file/studio/notes/hello.md', {
@@ -878,6 +825,17 @@ test('clearing a live Refusal lands the address that was held while it was live'
   await page.getByRole('button', { name: 'Re-authorize' }).click();
   await expect(page.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('Hello');
   await expect(page.getByRole('heading', { level: 1, name: 'File' })).toBeVisible();
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Rooms' })
+    .click();
+  await expect(page.getByRole('article', { name: 'Studio' })).toContainText('notes/hello.md');
+  await page
+    .getByRole('navigation', { name: 'Screens' })
+    .getByRole('button', { name: 'Work' })
+    .click();
+  await expect(page.getByRole('status', { name: 'Draft inventory' })).toHaveText('No Drafts.');
+  await expect(page.getByRole('heading', { name: 'Studio' })).toBeVisible();
 });
 
 test('connectApp opens a delivered File address over the bridge client', async ({ page }) => {
@@ -888,21 +846,19 @@ test('connectApp opens a delivered File address over the bridge client', async (
       const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
       const { serveMdRuntime } = await import('@agentshouse/mdruntime/host');
       const helper = '/src/testing.js';
-      const { fixtureRoom, fixtureShell, runtimeOptions } = await import(helper);
+      const { fixtureRoom, fixtureShell } = await import(helper);
       const house = createHouseBridgeTestHost({
         address: '/file/studio/notes/hello.md',
       });
       const adapter = createMemoryAdapter({ rooms: rooms.map(fixtureRoom) as never });
       const controller = new AbortController();
-      const host = serveMdRuntime(
-        runtimeOptions({
-          adapter,
-          requiredGuarantees: [],
-          discoveryIntervalMs: 60_000,
-          signal: controller.signal,
-          shell: fixtureShell(),
-        }),
-      );
+      const host = serveMdRuntime({
+        adapter,
+        requiredGuarantees: [],
+        discoveryIntervalMs: 60_000,
+        signal: controller.signal,
+        shell: fixtureShell(),
+      });
       const channel = new MessageChannel();
       host.attach(channel.port1, 'mdui');
       house.attachRuntime(channel.port2);

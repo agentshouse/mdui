@@ -29,7 +29,7 @@ test('loads the built App and reads Types and Query through the remote client', 
     const { serveMdRuntime } = await import('@agentshouse/mdruntime/host');
     const { createMemoryAdapter } = await import('@agentshouse/mdruntime/memory');
     const helper = '/src/testing.js';
-    const { fixtureRoom, fixtureShell, runtimeOptions, waitForRooms } = await import(helper);
+    const { fixtureRoom, fixtureShell, waitForRooms } = await import(helper);
     const controller = new AbortController();
     try {
       const house = createHouseBridgeTestHost();
@@ -50,14 +50,12 @@ test('loads the built App and reads Types and Query through the remote client', 
           }),
         ],
       });
-      const host = serveMdRuntime(
-        runtimeOptions({
-          adapter,
-          requiredGuarantees: [],
-          signal: controller.signal,
-          shell: fixtureShell(),
-        }),
-      );
+      const host = serveMdRuntime({
+        adapter,
+        requiredGuarantees: [],
+        signal: controller.signal,
+        shell: fixtureShell(),
+      });
       const appChannel = new MessageChannel();
       const probeChannel = new MessageChannel();
       host.attach(appChannel.port1, 'mdui');
@@ -71,7 +69,7 @@ test('loads the built App and reads Types and Query through the remote client', 
       const types = await runtime.types('fixture');
       return {
         types: types.collection.status === 'unavailable' ? [] : types.collection.types,
-        query: await runtime.query({ selector: { room: 'fixture', type: 'note' } }),
+        query: await runtime.query({ rooms: ['fixture'], types: ['note'], select: 'all' }),
         bound: document.getElementById('app') !== null,
         appPadding: getComputedStyle(document.getElementById('app')!).padding,
         statusDisplay: getComputedStyle(document.querySelector('md-sync-status')!).display,
@@ -88,8 +86,8 @@ test('loads the built App and reads Types and Query through the remote client', 
     {
       name: 'note',
       path: 'types/note.md',
-      fields: { title: { kind: 'string' } },
-      sections: { Body: { kind: 'text' } },
+      fields: { title: { kind: 'string', required: false } },
+      sections: { Body: { kind: 'text', required: false } },
     },
   ]);
   expect(visible.query.documents).toEqual([
@@ -97,13 +95,12 @@ test('loads the built App and reads Types and Query through the remote client', 
       room: 'fixture',
       path: 'notes/hello.md',
       type: 'note',
-      content: '---\ntype: note\ntitle: Hello\n---\n## Body\nPublished packages.\n',
+      markdown: '---\ntype: note\ntitle: Hello\n---\n## Body\nPublished packages.\n',
       fields: { type: 'note', title: 'Hello' },
       sections: { Body: 'Published packages.\n' },
       preamble: '',
       backlinks: [],
     },
   ]);
-  expect(visible.query.roomVersions).toEqual({ fixture: 'v1' });
   expect(errors).toEqual([]);
 });

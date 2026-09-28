@@ -14,10 +14,11 @@ Runtime and no Adapter of its own. It exports `bindApp` so tests can mount the
 seven screens from the HTML template against the host entry serving the
 in-memory Adapter.
 Its application dependencies are `@agentshouse/mdruntime` at
-`0.1.0-alpha.13`, `@agentshouse/app-bridge` at `0.1.0-alpha.1`, and
-`@agentshouse/mdruntime-adapter` at `0.1.0-alpha.4`,
-with published registry integrity in `package-lock.json`.
-The Runtime pin carries Model `0.1.0-alpha.11` and Query `0.1.0-alpha.9`.
+`0.1.0-alpha.30`, `@agentshouse/app-bridge` at `0.1.0-alpha.3`, and the renderer
+packages named below, with published registry integrity in `package-lock.json`.
+`@agentshouse/mdruntime-adapter` at `0.1.0-alpha.25` is a test-only development
+dependency and is outside the built App graph.
+The Runtime pin carries Model `0.1.0-alpha.15`.
 The renderer uses exactly `micromark@4.0.2` and
 `micromark-extension-gfm@3.0.0` under the narrow
 [User-approved dependency exception](docs/agents/renderer-dependency-approval.json).
@@ -193,8 +194,8 @@ await view.create(runtime, 'studio', 'work/created.md', 'item');
 
 `bind(runtime, room, path)` observes the Document through
 `runtime.observe('query')` with that Room and Path, write grants and
-Provider-owned Paths from `runtime.observe('rooms')`, and that Room's queue
-from `runtime.observe('queue')`. Typed fields render as the field controls of
+Provider-owned Paths from `runtime.observe('rooms')`, and its Room Draft from
+`runtime.observe('room-drafts')`. Typed fields render as the field controls of
 `components/01`. Text comes from the Query result: the preamble, declared
 sections in declared order, extra sections the Document carries, structured
 sections as lists through the renderer, and the whole text of an untyped
@@ -206,15 +207,17 @@ continues.
 
 When the Path has a write grant and is not Provider-owned, field controls are
 enabled and section, preamble, and whole-text editors write only through
-`runtime.draft`, including in-progress textarea text. A whole-text editor opens
-the durable `draft.whole` when that value is present, including empty text,
+`runtime.roomDraft`, including in-progress textarea text. A whole-text editor opens
+the durable Room Draft `markdown` part when that value is present, including empty text,
 otherwise the public Query document's complete Markdown. File Save calls
-`runtime.save` with structured changes from that Draft. `create` writes a typed create Draft at an absent Path. Rename,
+`runtime.save` with that Room Draft's Path and revision. `create` writes a typed
+`creation` part at an absent Path. Rename,
 move, and removal are controls of the same Save. A missing write grant or a
 Provider-owned Path shows the reason, keeps field controls disabled, and
-omits editing controls. A Conflicted or Rejected head is restored from the
-queue into the Draft; Save names that head, and discard uses
-`runtime.queue.discard`.
+omits editing controls. A stale Room Draft write or discard shows `stale` and
+the current Room Draft rather than retrying the old value. A Conflicted,
+Rejected, expired, or withdrawn Change Batch leaves the queue and returns as a
+marked Room Draft; the App Creator saves or discards that Room Draft.
 
 ## Sync Status indicator
 
@@ -267,33 +270,35 @@ the screen it already shows. The length bound is owned by
 [`@agentshouse/app-bridge`](https://www.npmjs.com/package/@agentshouse/app-bridge).
 Presentation State is which screen is shown and which file Document View is
 bound to, written through the client's presentation surface and observed so a
-tab with no address below the App path follows it. A failed presentation read
-still starts the App and is shown on Storage, and does not write over the unread
-store; a failed presentation write is shown there too.
+tab with no address below the App path follows it. A failed presentation write
+is shown on Storage and a later successful write clears it.
 
 ```js
 import { connectApp } from './index.js';
 await connectApp();
 ```
 
-| Screen  | Public surfaces                                                                                                                                |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rooms   | `rooms` / `observe('rooms')`, `observe('query')`, `types`, and Query Paths for each Room's file tree; opening a file binds Document View       |
-| Search  | Local Query narrowed by Room, MD Type, and one typed field value; substring over Query section text and field values; a result opens File      |
-| File    | existing Document View                                                                                                                         |
-| Work    | `draft.list()` / `observe('drafts')` for every durable Draft, and `observe('queue')` per Room with outcome kind and structured code and fields |
-| Refusal | `observe('connection-refusal')`; `reauthorize` when `reauthorizationOffered`                                                                   |
-| Storage | `observe('storage-loss')` with the reported persistence answer; a failed presentation read or write is named on the same surface               |
-| Log     | `log()` shown as text and downloaded as `synchronization-log.txt`                                                                              |
+| Screen  | Public surfaces                                                                                                                          |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Rooms   | `rooms` / `observe('rooms')`, `observe('query')`, `types`, and Query Paths for each Room's file tree; opening a file binds Document View |
+| Search  | Local Search narrowed by Room, MD Type, and one typed field value; ranked Document hits open File                                        |
+| File    | existing Document View                                                                                                                   |
+| Work    | `roomDraft.list()` / `observe('room-drafts')` for every durable Room Draft, and `observe('queue')` per Room with Pending Change state    |
+| Refusal | `observe('connection-refusal')`; `reauthorize` when `reauthorizationOffered`                                                             |
+| Storage | `observe('storage-loss')` with the reported persistence answer; a failed presentation write is named on the same surface                 |
+| Log     | `log()` shown as text and downloaded as `synchronization-log.txt`                                                                        |
 
-Work renders the complete public Draft snapshot by Room locator and Path,
-independently of Rooms and Query membership. Entering Work or retrying a failed
-read calls `draft.list()`; `observe('drafts')` updates the rendered inventory
-after committed changes. A failed read keeps the last rendered inventory and
-shows the error with a Retry Drafts control. A successful later snapshot clears
-that error. Draft read failure is separate from the Runtime's storage-loss
-statement. A durable Save refusal keeps the Document View's Draft visible and
-shows the returned rule without attempting another durable write.
+Work renders the complete public Room Draft snapshot by Room locator and Path.
+A Room Draft remains when its Document leaves Query while Discovery still lists
+the Room; a completed Discovery that no longer lists the Room removes its Room
+Drafts under `R023`. Entering Work or retrying a failed read calls
+`roomDraft.list()`; `observe('room-drafts')` updates the rendered inventory after
+committed changes. A failed read keeps the last rendered inventory and shows the
+error with a Retry Drafts control. A successful later snapshot clears that
+error. Room Draft read failure is separate from the Runtime's storage-loss
+statement. A refused Save keeps the Document View's Room Draft visible and
+shows the returned rule without attempting another durable write. Provider
+refusals return on Room Drafts while the Pending Change queue continues.
 Rooms and Document View retain their controls when an observation repeats the
 rendered values, so unchanged notifications do not interrupt native typing or
 keyboard focus.

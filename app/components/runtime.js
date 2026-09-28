@@ -1,27 +1,36 @@
 export function mdTypes(result) {
     return result === undefined || result.status === 'unavailable' ? [] : result.types;
 }
-export function observation(start) {
+export function observation(start, receive) {
     let stop;
     let closed = false;
-    void start.then((end)=>{
+    void start.then((handle)=>{
         if (closed) {
-            end();
+            handle.close();
             return;
         }
-        stop = end;
+        receive(handle.current());
+        const unsubscribe = handle.subscribe(receive);
+        stop = ()=>{
+            unsubscribe();
+            handle.close();
+        };
     });
     return ()=>{
         closed = true;
         stop?.();
     };
 }
-export const queueKinds = {
-    pending: 'Pending',
+export const returnedKinds = {
     conflicted: 'Conflicted',
     rejected: 'Rejected',
     expired: 'Expired',
-    'retryable-refusal': 'Pending'
+    withdrawn: 'Withdrawn'
+};
+export const queueStates = {
+    waiting: 'Waiting',
+    submitted: 'Submitted',
+    reset: 'Reset'
 };
 export function refusalParts(refusal) {
     return [
