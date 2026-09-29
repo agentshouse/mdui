@@ -308,6 +308,24 @@ test('transfers no History until the panel opens, then shows author, time, conte
   });
 });
 
+test.describe('Browser locale that is not a valid language tag', () => {
+  test.use({ locale: 'en-US@posix', timezoneId: 'UTC' });
+  test('labels History revisions with times in the runtime default locale', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await start(page, [studio], { history: true });
+    await mount(page, 'work/alpha.md');
+    await page.getByText('History', { exact: true }).press('Enter');
+    await expect(
+      page.getByRole('button', { name: /^ada · Sep 1, 2026, 12:00\sAM$/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /^lin · Sep 8, 2026, 12:00\sPM$/ }),
+    ).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+});
+
 test('disables controls and shows the reason for a missing write grant', async ({ page }) => {
   await start(page, [studio]);
   await mount(page, 'people/ada.md');

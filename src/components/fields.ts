@@ -1,6 +1,7 @@
 import type { DocumentQuery } from '@agentshouse/mdruntime';
 import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import { adopt, fieldStyles } from './theme.js';
+import { locale } from './locale.js';
 import { mdTypes, observation } from './runtime.js';
 
 export type FieldDefinition = {
@@ -117,7 +118,7 @@ abstract class ScalarField extends FieldControl {
     adopt(this.root, fieldStyles);
     this.control = this.createControl();
     this.control.id = 'value';
-    this.control.lang = navigator.language;
+    this.control.lang = locale;
     this.control.setAttribute('aria-describedby', 'message');
     this.caption.htmlFor = 'value';
     this.message.id = 'message';
@@ -196,7 +197,7 @@ export class NumberField extends ScalarField {
       : this.inputMessage;
   }
   protected override formattedValue(): string {
-    return new Intl.NumberFormat(navigator.language, { maximumSignificantDigits: 21 }).format(
+    return new Intl.NumberFormat(locale, { maximumSignificantDigits: 21 }).format(
       this.currentValue as number,
     );
   }
@@ -222,7 +223,7 @@ export class DateField extends ScalarField {
       : this.inputMessage;
   }
   protected override formattedValue(): string {
-    return new Intl.DateTimeFormat(navigator.language, {
+    return new Intl.DateTimeFormat(locale, {
       dateStyle: 'medium',
       timeZone: 'UTC',
     }).format((this.control as HTMLInputElement).valueAsDate!);

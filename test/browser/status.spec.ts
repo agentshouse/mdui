@@ -95,6 +95,22 @@ test('shows Syncing then Synced with the last completed time from Observe', asyn
   expect(seen.at(-1)).toBe('synced');
 });
 
+test.describe('Browser locale that is not a valid language tag', () => {
+  test.use({ locale: 'en-US@posix', timezoneId: 'UTC' });
+  test('shows the last completed time in the runtime default locale', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await start(page);
+    await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Synced');
+    const status = await page.evaluate(() => window.statusFixture.runtime.syncStatus());
+    await expect(page.locator('time')).toHaveAttribute('datetime', status.lastCompleted!);
+    await expect(page.locator('time')).toHaveText(
+      /^[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}\s[AP]M$/,
+    );
+    expect(errors).toEqual([]);
+  });
+});
+
 test('shows Pending from Observe after a local Save', async ({ page }) => {
   await start(page);
   await expect(page.getByRole('status', { name: 'Sync Status' })).toContainText('Synced');

@@ -1,4 +1,5 @@
 import { adopt, fieldStyles } from './theme.js';
+import { locale } from './locale.js';
 import { mdTypes, observation } from './runtime.js';
 const configure = Symbol('configure');
 export class FieldControl extends HTMLElement {
@@ -83,7 +84,7 @@ class ScalarField extends FieldControl {
         adopt(this.root, fieldStyles);
         this.control = this.createControl();
         this.control.id = 'value';
-        this.control.lang = navigator.language;
+        this.control.lang = locale;
         this.control.setAttribute('aria-describedby', 'message');
         this.caption.htmlFor = 'value';
         this.message.id = 'message';
@@ -152,7 +153,7 @@ export class NumberField extends ScalarField {
         return typeof this.currentValue === 'number' && Number.isFinite(this.currentValue) ? '' : this.inputMessage;
     }
     formattedValue() {
-        return new Intl.NumberFormat(navigator.language, {
+        return new Intl.NumberFormat(locale, {
             maximumSignificantDigits: 21
         }).format(this.currentValue);
     }
@@ -174,7 +175,7 @@ export class DateField extends ScalarField {
         return typeof this.currentValue === 'string' && this.control?.value === this.currentValue && this.currentValue !== '' ? '' : this.inputMessage;
     }
     formattedValue() {
-        return new Intl.DateTimeFormat(navigator.language, {
+        return new Intl.DateTimeFormat(locale, {
             dateStyle: 'medium',
             timeZone: 'UTC'
         }).format(this.control.valueAsDate);

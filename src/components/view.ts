@@ -11,6 +11,7 @@ import type {
 import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import { type FieldControl, type FieldDefinition } from './fields.js';
 import { internalPath, relativePath } from './links.js';
+import { locale } from './locale.js';
 import { mdTypes, observation, refusalParts } from './runtime.js';
 import './fields.js';
 import './markdown.js';
@@ -1029,7 +1030,7 @@ export class DocumentView extends HTMLElement {
   }
 
   private revisionLabel(revision: HistoryRevision): string {
-    const time = new Intl.DateTimeFormat(navigator.language, {
+    const time = new Intl.DateTimeFormat(locale, {
       dateStyle: 'medium',
       timeStyle: 'short',
     }).format(new Date(revision.time));
