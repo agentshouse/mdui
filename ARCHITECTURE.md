@@ -171,8 +171,11 @@ the accessible label; the boolean `disabled` attribute disables all native
 interactions. Calling `focus()` focuses the first control. Adding and removing
 list items places focus on the next usable control.
 
-Number and date displays use the browser locale. Dates retain their ISO value
-without a local-timezone shift. App CSS may set `--md-color-scheme`,
+Number and date displays use the browser locale, resolved once from
+`navigator.language` in `src/components/locale.ts`; when the browser reports a
+tag that is not valid BCP 47, such as `en-US@posix` from Chromium under
+`LANG=C.UTF-8`, they use the runtime's default locale. Dates retain their ISO
+value without a local-timezone shift. App CSS may set `--md-color-scheme`,
 `--md-background`, `--md-surface`, `--md-text`, `--md-border`, `--md-focus`, and
 `--md-error` on a containing element. Browser acceptance is owned by
 [TESTING.md](docs/agents/TESTING.md#location-and-naming).

@@ -1,4 +1,5 @@
 import { internalPath, relativePath } from './links.js';
+import { locale } from './locale.js';
 import { mdTypes, observation, refusalParts } from './runtime.js';
 import './fields.js';
 import './markdown.js';
@@ -948,7 +949,7 @@ export class DocumentView extends HTMLElement {
         }
     }
     revisionLabel(revision) {
-        const time = new Intl.DateTimeFormat(navigator.language, {
+        const time = new Intl.DateTimeFormat(locale, {
             dateStyle: 'medium',
             timeStyle: 'short'
         }).format(new Date(revision.time));

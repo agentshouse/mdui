@@ -1,6 +1,7 @@
 import type { SyncStatus } from '@agentshouse/mdruntime';
 import type { MdRuntimeClient } from '@agentshouse/mdruntime/client';
 import { observation, refusalParts, returnedKinds } from './runtime.js';
+import { locale } from './locale.js';
 import { adopt, statusStyles } from './theme.js';
 
 const states = {
@@ -69,7 +70,7 @@ export class SyncStatusIndicator extends HTMLElement {
       completed.append('Last completed ');
       const time = document.createElement('time');
       time.dateTime = status.lastCompleted;
-      time.textContent = new Intl.DateTimeFormat(navigator.language, {
+      time.textContent = new Intl.DateTimeFormat(locale, {
         dateStyle: 'medium',
         timeStyle: 'short',
       }).format(new Date(status.lastCompleted));

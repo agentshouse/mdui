@@ -10,6 +10,7 @@ const appModules = [
   'components/ftp.js',
   'components/html.js',
   'components/links.js',
+  'components/locale.js',
   'components/markdown.js',
   'components/profile.js',
   'components/runtime.js',

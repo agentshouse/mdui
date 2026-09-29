@@ -425,6 +425,25 @@ test.describe('French browser locale', () => {
   });
 });
 
+test.describe('Browser locale that is not a valid language tag', () => {
+  test.use({ locale: 'en-US@posix', timezoneId: 'UTC' });
+  test('formats dates and numbers in the runtime default locale without a page error', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await mount(page, 'number', 'amount', 'Amount', 1250.75);
+    await mount(page, 'date', 'due', 'Due', '2026-09-09');
+    await expect(page.getByRole('spinbutton', { name: 'Amount', exact: true })).toHaveAttribute(
+      'lang',
+      'en-US-u-va-posix',
+    );
+    await expect(page.locator('md-number-field')).toContainText('1250.75');
+    await expect(page.locator('md-date-field')).toContainText('Sep 9, 2026');
+    expect(errors).toEqual([]);
+  });
+});
+
 test('disables all scalar and list interactions through the public attribute', async ({ page }) => {
   for (const [kind, field, label, value] of [
     ['string', 'title', 'Title', 'text'],

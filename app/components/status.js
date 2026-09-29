@@ -1,4 +1,5 @@
 import { observation, refusalParts, returnedKinds } from './runtime.js';
+import { locale } from './locale.js';
 import { adopt, statusStyles } from './theme.js';
 const states = {
     pending: 'Pending',
@@ -60,7 +61,7 @@ export class SyncStatusIndicator extends HTMLElement {
             completed.append('Last completed ');
             const time = document.createElement('time');
             time.dateTime = status.lastCompleted;
-            time.textContent = new Intl.DateTimeFormat(navigator.language, {
+            time.textContent = new Intl.DateTimeFormat(locale, {
                 dateStyle: 'medium',
                 timeStyle: 'short'
             }).format(new Date(status.lastCompleted));
