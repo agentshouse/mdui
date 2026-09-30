@@ -41,6 +41,12 @@ const studio = {
     'notes/hello world.md': '---\ntype: note\ntitle: Spaced\n---\n## Body\nspaced unique phrase\n',
     'notes/hash#name.md': '---\ntype: note\ntitle: Hashed\n---\n## Body\nhash unique phrase\n',
   },
+  revisions: {
+    'notes/hello.md': 'rev-hello',
+    'notes/other.md': 'rev-other',
+    'notes/hello world.md': 'rev-spaced',
+    'notes/hash#name.md': 'rev-hashed',
+  },
 };
 
 async function start(
