@@ -39,6 +39,14 @@ const studio = {
     'work/ready.md':
       '---\ntype: project\ntitle: Ready item\nstage: Ready\n---\n## Summary\nReady work.\n',
   },
+  revisions: {
+    'notes/hello.md': 'rev-hello',
+    'notes/other.md': 'rev-other',
+    'notes/counted.md': 'rev-counted',
+    'notes/tagged.md': 'rev-tagged',
+    'notes/folded.md': 'rev-folded',
+    'work/ready.md': 'rev-ready',
+  },
 };
 
 const archive = {

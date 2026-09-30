@@ -14,9 +14,9 @@ Runtime and no Adapter of its own. It exports `bindApp` so tests can mount the
 seven screens from the HTML template against the host entry serving the
 in-memory Adapter.
 Its application dependencies are `@agentshouse/mdruntime` at
-`0.1.0-alpha.30`, `@agentshouse/app-bridge` at `0.1.0-alpha.3`, and the renderer
+`0.1.0-alpha.35`, `@agentshouse/app-bridge` at `0.1.0-alpha.3`, and the renderer
 packages named below, with published registry integrity in `package-lock.json`.
-`@agentshouse/mdruntime-adapter` at `0.1.0-alpha.25` is a test-only development
+`@agentshouse/mdruntime-adapter` at `0.1.0-alpha.31` is a test-only development
 dependency and is outside the built App graph.
 The Runtime pin carries Model `0.1.0-alpha.15`.
 The renderer uses exactly `micromark@4.0.2` and
