@@ -20,7 +20,7 @@ export interface PullRequestView {
 }
 
 export function ticketPathsIn(body: string): string[];
-export function partialTicketPathsIn(body: string): string[];
+export function ticketRefusals(body: string, read: (ticket: string) => string | null): string[];
 export function issueReferences(body: string): string[];
 export function hasIssueDirective(body: string, directive: string, issue: number): boolean;
 export function hasDirectRequest(body: string): boolean;

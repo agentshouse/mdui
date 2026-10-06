@@ -12,9 +12,9 @@ import {
 import {
   hasDirectRequest,
   issueReferences,
-  partialTicketPathsIn,
   pullRequest,
   ticketPathsIn,
+  ticketRefusals,
 } from './pull-requests.mjs';
 
 const scriptRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -107,18 +107,11 @@ function ticketsAt(body, head) {
     }
     return [];
   }
-  const partial = partialTicketPathsIn(body);
-  for (const ticket of tickets) {
+  const refusals = ticketRefusals(body, (ticket) => {
     const shown = spawnSync('git', ['show', `${head}:${ticket}`], { cwd: root, encoding: 'utf8' });
-    if (shown.status !== 0) refuse([`${ticket} does not exist at the PR head`]);
-    const status = shown.stdout.match(/^Status:\s*(\S+)\s*$/m)?.[1];
-    if (status !== 'resolved' && !partial.includes(ticket)) {
-      refuse([
-        `${ticket} is ${status ?? 'missing Status'}, not resolved`,
-        `a delivery of part of it lists it under ## Tickets as: ${ticket} (partial: <reason>)`,
-      ]);
-    }
-  }
+    return shown.status === 0 ? shown.stdout : null;
+  });
+  if (refusals.length > 0) refuse(refusals);
   return tickets;
 }
 

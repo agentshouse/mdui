@@ -174,8 +174,9 @@ accepts adversarial text directly through its public property, independently
 of Model collection validity; normal section input is read through Query.
 The pure lane owns `test/pure/address.spec.ts`, `test/pure/app.spec.ts`,
 `test/pure/pull-requests.spec.ts`, and the renderer corpus.
-`test/pure/pull-requests.spec.ts` asserts which `## Tickets` paths a PR body
-delivers and which of them it declares partial.
+`test/pure/pull-requests.spec.ts` asserts the merge gate's ticket refusals: a
+`## Tickets` entry with a partial reason is admitted unresolved, and a silent,
+reasonless, out-of-section, Status-less or missing ticket is refused.
 `test/pure/app.spec.ts` owns the shipped form as the
 Provider reads it: the manifest's entry and its empty external origins, the
 entry document's single reference, the built App's own module set without the
