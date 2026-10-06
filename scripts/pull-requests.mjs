@@ -1,21 +1,44 @@
 import { spawnSync } from 'node:child_process';
 
 const TICKET_PATH = /docs\/backlog\/tickets\/[A-Za-z0-9_./-]+\.md/g;
+const PARTIAL_TICKET = /(docs\/backlog\/tickets\/[A-Za-z0-9_./-]+\.md) \(partial: *[^)\s][^)\r\n]*\)/g;
 const ISSUE_DIRECTIVE = /\b(?:Fixes|Refs) #\d+/g;
 const TICKET_HEADING = /^## Tickets?\s*$/m;
 const RESIDUALS_HEADING = /^## Residuals\s*$/m;
 const NEXT_HEADING = /\n## /;
 
 export function ticketPathsIn(body) {
-  return [...new Set([...assignmentRegion(body).matchAll(TICKET_PATH)].map(([path]) => path))];
+  const region = ticketsSection(body) ?? beforeResiduals(body);
+  return [...new Set([...region.matchAll(TICKET_PATH)].map(([path]) => path))];
 }
 
-function assignmentRegion(body) {
+export function ticketRefusals(body, read) {
+  const partial = new Set(
+    [...(ticketsSection(body) ?? '').matchAll(PARTIAL_TICKET)].map(([, path]) => path),
+  );
+  return ticketPathsIn(body).flatMap((ticket) => {
+    const text = read(ticket);
+    if (text === null) return [`${ticket} does not exist at the PR head`];
+    const status = text.match(/^Status:\s*(\S+)\s*$/m)?.[1];
+    if (status === undefined) return [`${ticket} is missing Status, not resolved`];
+    if (status === 'resolved' || partial.has(ticket)) return [];
+    return [
+      `${ticket} is ${status}, not resolved`,
+      `a delivery of part of it lists it under ## Tickets as: ${ticket} (partial: <reason>)`,
+    ];
+  });
+}
+
+function beforeResiduals(body) {
   const residuals = body.search(RESIDUALS_HEADING);
-  const beforeResiduals = residuals === -1 ? body : body.slice(0, residuals);
-  const heading = beforeResiduals.search(TICKET_HEADING);
-  if (heading === -1) return beforeResiduals;
-  const fromHeading = beforeResiduals.slice(heading);
+  return residuals === -1 ? body : body.slice(0, residuals);
+}
+
+function ticketsSection(body) {
+  const region = beforeResiduals(body);
+  const heading = region.search(TICKET_HEADING);
+  if (heading === -1) return null;
+  const fromHeading = region.slice(heading);
   const next = fromHeading.search(NEXT_HEADING);
   return next === -1 ? fromHeading : fromHeading.slice(0, next);
 }

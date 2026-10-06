@@ -41,8 +41,9 @@ manifest.
 toolchain and Chromium; each invocation uses this worktree's source and an
 isolated dependency volume, and runs as the checkout owner. `scripts/ops.mjs` routes the existing backlog,
 documentation, and merge commands together with checks and formatting.
-The check runner checks source imports with dependency-cruiser and runs the
-three public test seams documented in [`TESTING.md`](docs/agents/TESTING.md).
+The check runner refuses inline `import('…')` types in `src/`, checks source
+imports with dependency-cruiser, and runs the three public test seams
+documented in [`TESTING.md`](docs/agents/TESTING.md).
 
 The browser lane's local host is check tooling; it serves the source it
 transforms and the built App as committed. Its compilation and published
@@ -281,15 +282,15 @@ import { connectApp } from './index.js';
 await connectApp();
 ```
 
-| Screen  | Public surfaces                                                                                                                          |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Rooms   | `rooms` / `observe('rooms')`, `observe('query')`, `types`, and Query Paths for each Room's file tree; opening a file binds Document View |
-| Search  | Local Search narrowed by Room, MD Type, and one typed field value; ranked Document hits open File                                        |
-| File    | existing Document View                                                                                                                   |
-| Work    | `roomDraft.list()` / `observe('room-drafts')` for every durable Room Draft, and `observe('queue')` per Room with Pending Change state    |
-| Refusal | `observe('connection-refusal')`; `reauthorize` when `reauthorizationOffered`                                                             |
-| Storage | `observe('storage-loss')` with the reported persistence answer; a failed presentation write is named on the same surface                 |
-| Log     | `log()` shown as text and downloaded as `synchronization-log.txt`                                                                        |
+| Screen  | Public surfaces                                                                                                                                                      |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rooms   | `observe('rooms')` with each Room's MD Types from `AppRoom.model`, `observe('query')`, and Query Paths for each Room's file tree; opening a file binds Document View |
+| Search  | Local Search narrowed by Room, MD Type, and one typed field value; ranked Document hits open File                                                                    |
+| File    | existing Document View                                                                                                                                               |
+| Work    | `roomDraft.list()` / `observe('room-drafts')` for every durable Room Draft, and `observe('queue')` per Room with Pending Change state                                |
+| Refusal | `observe('connection-refusal')`; `reauthorize` when `reauthorizationOffered`                                                                                         |
+| Storage | `observe('storage-loss')` with the reported persistence answer; a failed presentation write is named on the same surface                                             |
+| Log     | `log()` shown as text and downloaded as `synchronization-log.txt`                                                                                                    |
 
 Work renders the complete public Room Draft snapshot by Room locator and Path.
 A Room Draft remains when its Document leaves Query while Discovery still lists

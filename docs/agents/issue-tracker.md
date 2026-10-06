@@ -56,6 +56,12 @@ state is provisional: the default branch still carries the prior status, an
 abandoned branch has no tracker effect, and only merge makes `resolved`
 authoritative for dependents.
 
+A PR that delivers only part of a ticket keeps that ticket's status and lists
+it under `## Tickets` as
+`docs/backlog/tickets/<set>/<NN>-<slug>.md (partial: <one-line reason>)`.
+`npm run ops -- merge` admits that entry unresolved, refuses any other
+`## Tickets` entry that is not `resolved`, and releases the claims of both.
+
 Open GitHub Issues use `needs-triage`, `needs-info`, `blocked`,
 `ready-for-agent`, `ready-for-human`, and `wontfix` when one of those workflow
 roles applies. A delivered GitHub Issue is closed rather than receiving a

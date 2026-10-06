@@ -9,7 +9,13 @@ import {
   releaseClaims,
   ticketIdFrom,
 } from './backlog-claims.mjs';
-import { hasDirectRequest, issueReferences, pullRequest, ticketPathsIn } from './pull-requests.mjs';
+import {
+  hasDirectRequest,
+  issueReferences,
+  pullRequest,
+  ticketPathsIn,
+  ticketRefusals,
+} from './pull-requests.mjs';
 
 const scriptRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const root = realpathSync(process.env.MERGE_REPOSITORY_ROOT ?? scriptRoot);
@@ -101,12 +107,11 @@ function ticketsAt(body, head) {
     }
     return [];
   }
-  for (const ticket of tickets) {
+  const refusals = ticketRefusals(body, (ticket) => {
     const shown = spawnSync('git', ['show', `${head}:${ticket}`], { cwd: root, encoding: 'utf8' });
-    if (shown.status !== 0) refuse([`${ticket} does not exist at the PR head`]);
-    const status = shown.stdout.match(/^Status:\s*(\S+)\s*$/m)?.[1];
-    if (status !== 'resolved') refuse([`${ticket} is ${status ?? 'missing Status'}, not resolved`]);
-  }
+    return shown.status === 0 ? shown.stdout : null;
+  });
+  if (refusals.length > 0) refuse(refusals);
   return tickets;
 }
 

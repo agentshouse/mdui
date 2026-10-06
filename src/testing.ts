@@ -13,7 +13,7 @@ import type { MdRuntimeOptions, ModelResult, RuntimeShell } from '@agentshouse/m
 import {
   connectMdRuntime,
   type MdRuntimeClient,
-  type RuntimePort,
+  type Observation,
 } from '@agentshouse/mdruntime/client';
 import { serveMdRuntime, type MdRuntimeHost } from '@agentshouse/mdruntime/host';
 import type { MemoryAdapter, MemoryRoom } from '@agentshouse/mdruntime/memory';
@@ -182,23 +182,35 @@ export async function waitForRooms(
   });
 }
 
-function trackedPort(port: MessagePort): { port: RuntimePort; live: () => number } {
+function trackedRuntime(runtime: MdRuntimeClient): {
+  runtime: MdRuntimeClient;
+  live: () => number;
+} {
   let live = 0;
+  const observe = (...input: unknown[]) => {
+    live += 1;
+    return (runtime.observe as (...input: unknown[]) => Promise<Observation<unknown>>)(
+      ...input,
+    ).then(
+      (observation) => {
+        let open = true;
+        return {
+          ...observation,
+          close() {
+            if (open) live -= 1;
+            open = false;
+            observation.close();
+          },
+        };
+      },
+      (error: unknown) => {
+        live -= 1;
+        throw error;
+      },
+    );
+  };
   return {
-    port: {
-      postMessage(message: unknown) {
-        const body = (message as { message?: { kind?: string } }).message;
-        if (body?.kind === 'observe') live += 1;
-        if (body?.kind === 'stop') live -= 1;
-        port.postMessage(message);
-      },
-      addEventListener(type: 'message' | 'close', listener: (event: { data?: unknown }) => void) {
-        port.addEventListener(type, listener as EventListener);
-      },
-      start() {
-        port.start();
-      },
-    },
+    runtime: { ...runtime, observe: observe as MdRuntimeClient['observe'] },
     live: () => live,
   };
 }
@@ -226,10 +238,10 @@ export async function openTestRuntime(
     shell,
   });
   const channel = new MessageChannel();
-  const tracked = trackedPort(channel.port2);
   const detach = host.attach(channel.port1, options.app ?? 'mdui');
+  const tracked = trackedRuntime(connectMdRuntime(channel.port2));
   return {
-    runtime: connectMdRuntime(tracked.port),
+    runtime: tracked.runtime,
     host,
     liveObservations: tracked.live,
     shell,

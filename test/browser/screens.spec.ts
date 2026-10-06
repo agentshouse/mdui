@@ -594,6 +594,7 @@ test('Refusal shows the client/host protocol mismatch as a Connection Refusal', 
 
 test('opening files and unbinding leaves no live host observation', async ({ page }) => {
   await start(page);
+  expect(await page.evaluate(() => window.screensFixture.liveObservations())).toBeGreaterThan(0);
   await page.evaluate(async () => {
     const view = document.querySelector('md-document-view') as HTMLElement & {
       bind: (
