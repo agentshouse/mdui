@@ -9,7 +9,13 @@ import {
   releaseClaims,
   ticketIdFrom,
 } from './backlog-claims.mjs';
-import { hasDirectRequest, issueReferences, pullRequest, ticketPathsIn } from './pull-requests.mjs';
+import {
+  hasDirectRequest,
+  issueReferences,
+  partialTicketPathsIn,
+  pullRequest,
+  ticketPathsIn,
+} from './pull-requests.mjs';
 
 const scriptRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const root = realpathSync(process.env.MERGE_REPOSITORY_ROOT ?? scriptRoot);
@@ -101,11 +107,17 @@ function ticketsAt(body, head) {
     }
     return [];
   }
+  const partial = partialTicketPathsIn(body);
   for (const ticket of tickets) {
     const shown = spawnSync('git', ['show', `${head}:${ticket}`], { cwd: root, encoding: 'utf8' });
     if (shown.status !== 0) refuse([`${ticket} does not exist at the PR head`]);
     const status = shown.stdout.match(/^Status:\s*(\S+)\s*$/m)?.[1];
-    if (status !== 'resolved') refuse([`${ticket} is ${status ?? 'missing Status'}, not resolved`]);
+    if (status !== 'resolved' && !partial.includes(ticket)) {
+      refuse([
+        `${ticket} is ${status ?? 'missing Status'}, not resolved`,
+        `a delivery of part of it lists it under ## Tickets as: ${ticket} (partial: <reason>)`,
+      ]);
+    }
   }
   return tickets;
 }

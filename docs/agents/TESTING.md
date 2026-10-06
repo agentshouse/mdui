@@ -59,16 +59,20 @@ over a message port; component specs from `components/01` onward use that same
 public in-memory Adapter in the test placement. It belongs only to tests and
 ships in no App, by PRD-0005 in `agentshouse/mdruntime`.
 
-The static lane runs dependency-cruiser over `src/` and a specification that
-plants a runtime import, a type-only import, and a type-only re-export of a
-Provider-specific module outside the Adapter package, observes the
-`neutrality` error, removes the imports, and observes a clean result. Fixtures
-live under `tmp/` and are removed even on failure. The spec uses the lane's
-error reporter to verify both the nonzero exit and the named neutrality error.
-Dependency-cruiser parses with swc, which keeps type-only import and export
-declarations as dependencies. TypeScript `7.0.2` ships no compiler API that
-dependency-cruiser `18.4.0` admits, so its TypeScript parser is not used, and
-an inline `typeof import('…')` type query is not extracted.
+The static lane refuses every inline `import('…')` type in `src/`, then runs
+dependency-cruiser over `src/`. Dependency-cruiser parses with swc, which
+keeps type-only import and export declarations as dependencies but does not
+extract an inline `typeof import('…')` type query. TypeScript `7.0.2` ships no
+compiler API that dependency-cruiser `18.4.0` admits, so its TypeScript parser
+is not used. Refusing that form keeps every module the source names visible to
+the `neutrality` rule. A specification plants a runtime import, a type-only
+import, and a type-only re-export of a Provider-specific module outside the
+Adapter package and observes the `neutrality` error, plants an inline type
+query of a Provider-specific and of a neutral module and observes the refusal
+naming each, removes them, and observes a clean result from both commands.
+Fixtures live under `tmp/` and are removed even on failure. The spec uses the
+lane's error reporter to verify both the nonzero exit and the named neutrality
+error.
 
 ## Cadence
 
@@ -122,11 +126,11 @@ a known-good literal, a worked example, or the spec.
 
 Tests live at public seams, never against internals, and use `.spec.ts`:
 
-| Location        | Runner and public seam                                                           |
-| --------------- | -------------------------------------------------------------------------------- |
-| `test/pure/`    | Vitest `pure` project: ES modules and pure observable behavior                   |
-| `test/browser/` | Playwright: the App's DOM and its public MD Runtime integration                  |
-| `test/static/`  | Vitest `static` project: the dependency-cruiser command's acceptance and refusal |
+| Location        | Runner and public seam                                                    |
+| --------------- | ------------------------------------------------------------------------- |
+| `test/pure/`    | Vitest `pure` project: ES modules and pure observable behavior            |
+| `test/browser/` | Playwright: the App's DOM and its public MD Runtime integration           |
+| `test/static/`  | Vitest `static` project: the static source checks' acceptance and refusal |
 
 App loading is observed on the committed `app/`, which is the App the Provider
 builds; every other browser specification mounts the source it protects.
@@ -168,8 +172,11 @@ Building acceptance.
 The renderer seam also
 accepts adversarial text directly through its public property, independently
 of Model collection validity; normal section input is read through Query.
-The pure lane owns `test/pure/address.spec.ts`, `test/pure/app.spec.ts`, and
-the renderer corpus. `test/pure/app.spec.ts` owns the shipped form as the
+The pure lane owns `test/pure/address.spec.ts`, `test/pure/app.spec.ts`,
+`test/pure/pull-requests.spec.ts`, and the renderer corpus.
+`test/pure/pull-requests.spec.ts` asserts which `## Tickets` paths a PR body
+delivers and which of them it declares partial.
+`test/pure/app.spec.ts` owns the shipped form as the
 Provider reads it: the manifest's entry and its empty external origins, the
 entry document's single reference, the built App's own module set without the
 test placement, bare specifiers the committed lockfile pins, and the absence

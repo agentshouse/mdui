@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 
 const TICKET_PATH = /docs\/backlog\/tickets\/[A-Za-z0-9_./-]+\.md/g;
+const PARTIAL_TICKET = /(docs\/backlog\/tickets\/[A-Za-z0-9_./-]+\.md) \(partial: *[^)\s][^)\r\n]*\)/g;
 const ISSUE_DIRECTIVE = /\b(?:Fixes|Refs) #\d+/g;
 const TICKET_HEADING = /^## Tickets?\s*$/m;
 const RESIDUALS_HEADING = /^## Residuals\s*$/m;
@@ -8,6 +9,12 @@ const NEXT_HEADING = /\n## /;
 
 export function ticketPathsIn(body) {
   return [...new Set([...assignmentRegion(body).matchAll(TICKET_PATH)].map(([path]) => path))];
+}
+
+export function partialTicketPathsIn(body) {
+  return [
+    ...new Set([...assignmentRegion(body).matchAll(PARTIAL_TICKET)].map(([, path]) => path)),
+  ];
 }
 
 function assignmentRegion(body) {

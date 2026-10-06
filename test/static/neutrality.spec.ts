@@ -14,9 +14,12 @@ test('refuses a Provider-specific import outside the Adapter and passes after it
     spawnSync('node_modules/.bin/depcruise', [entry, '--config', '.dependency-cruiser.cjs'], {
       encoding: 'utf8',
     });
+  const importTypes = () =>
+    spawnSync(process.execPath, ['scripts/import-types.mjs', entry], { encoding: 'utf8' });
 
   writeFileSync(entry, "import '@agentshouse/mdruntime/client';\n");
   expect(cruise().status).toBe(0);
+  expect(importTypes().status).toBe(0);
 
   for (const source of [
     "import '@agentshouse/mdruntime-adapter';\n",
@@ -29,6 +32,14 @@ test('refuses a Provider-specific import outside the Adapter and passes after it
     expect(refused.stdout + refused.stderr).toContain('neutrality');
   }
 
+  for (const specifier of ['@agentshouse/mdruntime-adapter', '@agentshouse/mdruntime/client']) {
+    writeFileSync(entry, `export type Entry = typeof import('${specifier}');\n`);
+    const refused = importTypes();
+    expect(refused.status, refused.stdout + refused.stderr).toBe(1);
+    expect(refused.stderr).toContain(`import('${specifier}')`);
+  }
+
   writeFileSync(entry, "import '@agentshouse/mdruntime/client';\n");
   expect(cruise().status).toBe(0);
+  expect(importTypes().status).toBe(0);
 });

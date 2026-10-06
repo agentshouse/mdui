@@ -8,6 +8,7 @@ const commands = {
   pure: [['vitest', 'run', '--project', 'pure']],
   browser: [['playwright', 'test']],
   static: [
+    ['node', 'scripts/import-types.mjs', 'src'],
     ['depcruise', 'src', '--config', '.dependency-cruiser.cjs'],
     ['vitest', 'run', '--project', 'static'],
   ],
