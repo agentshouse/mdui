@@ -53,7 +53,9 @@ instead of being invented during implementation.
 ## Engineering conventions
 
 - Comments in code are not allowed. Names and types carry the meaning; "why"
-  belongs in git history, ADRs, and `docs/`.
+  belongs in git history, ADRs, and `docs/`. The one exception: every interval,
+  whether a poll, a cadence, a timer or a retry period, states its reason in a
+  one-line comment directly above its setting.
 - Tests protect observable behavior, not implementation. Read
   [`docs/agents/TESTING.md`](docs/agents/TESTING.md) before changing behavior
   or tests.
