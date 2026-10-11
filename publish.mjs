@@ -22,7 +22,7 @@ rmSync(index, { force: true });
 git(['--work-tree=.', 'add', '--all', '--force', '.'], { cwd: 'dist', env });
 const tree = git(['write-tree'], { env });
 rmSync(index, { force: true });
-const release = git(['commit-tree', tree, '-m', `Release of ${git(['rev-parse', 'main'])}`]);
+const release = git(['commit-tree', tree, '-m', `Release of ${git(['rev-parse', 'HEAD'])}`]);
 
 const pushed = spawnSync(
   'git',
@@ -31,7 +31,7 @@ const pushed = spawnSync(
     '--atomic',
     ...(values.name === undefined ? [] : ['-o', `name=${values.name}`]),
     'origin',
-    'main',
+    'HEAD:refs/heads/main',
     `+${release}:refs/heads/release`,
   ],
   { stdio: 'inherit' },
