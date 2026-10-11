@@ -1,4 +1,4 @@
 {
-  "entry": "app/index.html",
-  "external_origins": []
+  "entry": "index.html",
+  "room_slots": [{ "name": "room", "access": "read", "types": [] }]
 }

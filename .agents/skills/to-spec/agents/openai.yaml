@@ -1,8 +1,0 @@
-# house: vendored from agentshouse/house — skills/to-spec/agents/openai.yaml (channel base).
-# Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`.
-
-interface:
-  display_name: "To Spec"
-  short_description: "Turn a conversation into a spec"
-policy:
-  allow_implicit_invocation: false

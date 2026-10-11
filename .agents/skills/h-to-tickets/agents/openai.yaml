@@ -1,8 +1,0 @@
-# house: vendored from agentshouse/house — md/skills/h-to-tickets/agents/openai.yaml (channel md).
-# Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`.
-
-interface:
-  display_name: "House To Tickets"
-  short_description: "Publish repository tracer-bullet tickets"
-policy:
-  allow_implicit_invocation: false

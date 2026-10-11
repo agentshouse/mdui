@@ -1,8 +1,0 @@
-# house: vendored from agentshouse/house — skills/implement/agents/openai.yaml (channel base).
-# Do not edit this copy. Edit it in `house`, then run `npm run ops -- house sync`.
-
-interface:
-  display_name: "Implement"
-  short_description: "Build work from a spec or tickets"
-policy:
-  allow_implicit_invocation: false

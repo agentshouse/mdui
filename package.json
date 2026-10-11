@@ -1,46 +1,22 @@
 {
   "name": "mdui",
+  "version": "0.0.0",
   "private": true,
-  "description": "MD UI: the repository every App of MD App is forked from",
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "ops": "node -- scripts/ops.mjs"
+    "build": "rm -rf dist && esbuild main.ts --bundle --format=esm --outdir=dist && cp index.html app.json schema.yaml dist/",
+    "test": "vitest run --environment happy-dom",
+    "publish": "node publish.mjs"
   },
   "dependencies": {
-    "@agentshouse/app-bridge": "0.1.0-alpha.3",
-    "@agentshouse/mdruntime": "0.1.0-alpha.35",
-    "micromark": "4.0.2",
-    "micromark-extension-gfm": "3.0.0"
+    "@agentshouse/app-bridge": "0.1.0-c3a0f0faaf74b"
   },
   "devDependencies": {
-    "@agentshouse/mdruntime-adapter": "0.1.0-alpha.31",
-    "@playwright/test": "1.63.0",
-    "@swc/core": "1.16.2",
-    "@types/node": "24.13.6",
-    "dependency-cruiser": "18.4.0",
-    "oxfmt": "0.70.0",
-    "typescript": "7.0.2",
+    "@agentshouse/mdruntime": "0.1.0-c1954630fadb6",
+    "esbuild": "0.28.2",
+    "fake-indexeddb": "6.2.5",
+    "happy-dom": "20.14.6",
     "vitest": "5.0.1"
-  },
-  "devEngines": {
-    "packageManager": {
-      "name": "npm",
-      "version": "11.19.0",
-      "onFail": "error"
-    },
-    "runtime": {
-      "name": "node",
-      "version": "24.21.0",
-      "onFail": "error"
-    }
-  },
-  "engines": {
-    "node": "24.21.0",
-    "npm": "11.19.0"
-  },
-  "packageManager": "npm@11.19.0",
-  "allowScripts": {
-    "@swc/core@1.16.2": true
   }
 }
