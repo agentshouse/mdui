@@ -10,10 +10,10 @@
     "publish": "node publish.mjs"
   },
   "dependencies": {
-    "@agentshouse/app-bridge": "0.1.0-c3a0f0faaf74b"
+    "@agentshouse/app-bridge": "0.1.0-c10754d1d3939"
   },
   "devDependencies": {
-    "@agentshouse/mdruntime": "0.1.0-c1954630fadb6",
+    "@agentshouse/mdruntime": "0.1.0-c0e5d05c64ed4",
     "esbuild": "0.28.2",
     "fake-indexeddb": "6.2.5",
     "happy-dom": "20.14.6",

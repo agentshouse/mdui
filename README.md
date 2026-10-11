@@ -7,7 +7,8 @@ TypeScript: `index.html`, `main.ts`, `app.json` and `schema.yaml`.
 
 `main.ts` takes the runtime client House hands the App,
 `connectHouseBridge().runtime` from `@agentshouse/app-bridge`; the runtime
-package `@agentshouse/mdruntime` describes what the client offers.
+package `@agentshouse/mdruntime` describes what the client offers. House's
+`find_command` "App" is the guide to building an App or a Site from mdui.
 
 ## Build
 
@@ -34,7 +35,9 @@ builds, then pushes `main` and the build, as one new commit without parents on
 `release`, to `origin` in one atomic push, and prints the remote's answer. The
 App's House repository publishes the `release` it receives. In a clone of
 House's `app/new.git`, the push that creates the App names it:
-`npm run publish -- --name "<name>"`.
+`npm run publish -- --name "<name>"`. It prints the App's `.git` address;
+point `origin` there with `git remote set-url origin <address>` before the next
+publish.
 
 The package is private, so `npm publish` refuses.
 
