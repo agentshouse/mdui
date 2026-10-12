@@ -6,7 +6,7 @@ slot binds and updates the list as they change. It is framework-free
 TypeScript: `index.html`, `main.ts`, `app.json` and `schema.yaml`.
 
 `main.ts` takes the runtime client House hands the App,
-`connectHouseBridge().runtime` from `@agentshouse/app-bridge`; the runtime
+`houseBridge().runtime` from `@agentshouse/app-bridge`; the runtime
 package `@agentshouse/mdruntime` describes what the client offers. House's
 `find_command` "App" is the guide to building an App or a Site from mdui.
 

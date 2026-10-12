@@ -72,7 +72,6 @@ test('the built App lists the bound Room alone and shows a document written afte
   });
   const house = createHouseBridgeTestHost();
   house.attachRuntime(connectMdRuntime(channel.port2));
-  Object.assign(globalThis, { houseBridge: house.port, houseRuntime: house.runtime });
   const entry = new DOMParser().parseFromString(
     readFileSync('dist/index.html', 'utf8'),
     'text/html',

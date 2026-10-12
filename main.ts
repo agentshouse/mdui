@@ -1,6 +1,6 @@
-import { connectHouseBridge } from '@agentshouse/app-bridge';
+import { houseBridge } from '@agentshouse/app-bridge';
 
-const runtime = await connectHouseBridge().runtime;
+const runtime = await houseBridge().runtime;
 const rooms = await runtime.observe('rooms');
 const documents = await runtime.observe('query', { select: {}, orderBy: [{ by: 'path' }] });
 const main = document.querySelector('main')!;
