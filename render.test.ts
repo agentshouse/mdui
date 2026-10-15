@@ -10,7 +10,7 @@ function listed(main: Element): string[] {
   );
 }
 
-test('renders a pending Local Query as empty Room lists until its documents arrive', () => {
+test('withholds Room lists for a pending Local Query until its documents arrive', () => {
   const main = document.createElement('main');
   const rooms = [
     { locator: 'notes', name: 'Notes', roomVersion: 'notes-1' },
@@ -18,7 +18,7 @@ test('renders a pending Local Query as empty Room lists until its documents arri
   ];
 
   renderRooms(main, rooms, { pending: true });
-  expect(listed(main)).toEqual(['Notes: ', 'Arriving: ']);
+  expect(listed(main)).toEqual([]);
 
   renderRooms(main, rooms, {
     documents: [
