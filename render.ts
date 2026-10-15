@@ -18,7 +18,11 @@ export function renderRooms(
   rooms: readonly ListedRoom[],
   query: LocalQuery,
 ): void {
-  const documents = 'pending' in query ? [] : query.documents;
+  if ('pending' in query) {
+    main.replaceChildren();
+    return;
+  }
+  const documents = query.documents;
   main.replaceChildren(
     ...rooms
       .filter((room) => room.roomVersion !== null)
