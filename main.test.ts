@@ -189,12 +189,9 @@ test('a checkpoint asked while a task is still being restored answers the restor
   expect(await checkpointed).toEqual(task);
 });
 
-test.each([
-  { retryable: true, offers: ['Try again'] },
-  { retryable: false, offers: [] },
-])(
-  'a refused connection shows the refusal in place of the list, offers Try again only when it may pass ($retryable), and never answers ready',
-  async ({ retryable, offers }) => {
+test.each([{ retryable: true }, { retryable: false }])(
+  'a refused connection shows the refusal in place of the list, offers no Try again the runtime would not attempt, House retryable or not ($retryable), and never answers ready',
+  async ({ retryable }) => {
     const adapter = createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) });
     adapter.script('discover', {
       kind: 'contract-unavailable',
@@ -202,7 +199,6 @@ test.each([
       fields: { contract: 'future' },
       retryable,
     });
-    const reload = reloads();
     const refused = await opened(served(adapter));
 
     await vi.waitFor(() =>
@@ -211,13 +207,10 @@ test.each([
       ),
     );
     expect(listed()).toEqual([]);
-    expect(offered()).toEqual(offers);
+    expect(offered()).toEqual([]);
     expect(await refused.restore({ selected: { room: 'notes', path: 'todo.md' }, top: 0 })).toBe(
       false,
     );
-
-    document.querySelector<HTMLButtonElement>('main > button')?.click();
-    expect(reload).toHaveBeenCalledTimes(offers.length);
   },
 );
 
@@ -283,3 +276,35 @@ test.each([
     expect(reload).toHaveBeenCalledTimes(offers.length);
   },
 );
+
+test('Try again after a start-up failure that may pass opens the App again over the same runtime, which lists the Room', async () => {
+  const kept = new IDBFactory();
+  let busy = true;
+  const store = new Proxy(kept, {
+    get(target, key) {
+      if (key === 'open' && busy) {
+        return () => {
+          throw Object.assign(new Error('the store is busy'), {
+            code: 'future-store-failure',
+            retryable: true,
+          });
+        };
+      }
+      const held = Reflect.get(target, key);
+      return typeof held === 'function' ? held.bind(target) : held;
+    },
+  });
+  const reload = reloads();
+  const adapter = createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) });
+  const runtime = served(adapter, store);
+  await opened(runtime);
+  await vi.waitFor(() => expect(alerted()).toBe('mdui could not start (future-store-failure).'));
+
+  busy = false;
+  adapter.open();
+  document.querySelector<HTMLButtonElement>('main > button')?.click();
+  expect(reload).toHaveBeenCalledOnce();
+  const reopened = await opened(runtime);
+  expect(await reopened.restore(null)).toBe(true);
+  expect(listed()).toEqual(['Notes: todo.md']);
+});

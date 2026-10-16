@@ -9,12 +9,12 @@ type Task = {
 type Refusal = {
   readonly code: string;
   readonly retryable: boolean;
-  readonly refusal: { readonly code: string; readonly retryable: boolean } | null;
+  readonly refusal: { readonly code: string } | null;
 };
 
 type Stop = {
   readonly said: string;
-  readonly retryable: boolean;
+  readonly retry: (() => void) | null;
 };
 
 function captured(task: unknown): task is Task {
@@ -26,12 +26,12 @@ function captured(task: unknown): task is Task {
   );
 }
 
-function refused(refusal: Refusal): Stop {
+function refused(refusal: Refusal, retry: () => void): Stop {
   const codes =
     refusal.refusal === null ? refusal.code : `${refusal.code}: ${refusal.refusal.code}`;
   return {
     said: `House refused the connection (${codes}).`,
-    retryable: refusal.retryable || refusal.refusal?.retryable === true,
+    retry: refusal.retryable ? retry : null,
   };
 }
 
@@ -39,7 +39,7 @@ function failed(error: unknown): Stop {
   const held = error as { readonly code?: unknown; readonly retryable?: unknown } | null;
   return {
     said: `mdui could not start (${typeof held?.code === 'string' ? held.code : String(error)}).`,
-    retryable: held?.retryable === true,
+    retry: held?.retryable === true ? () => location.reload() : null,
   };
 }
 
@@ -70,8 +70,13 @@ function render(): void {
     list?.();
     return;
   }
-  renderStopped(main, stop.said, stop.retryable ? () => location.reload() : null);
+  renderStopped(main, stop.said, stop.retry);
   decide(false);
+}
+
+function fail(error: unknown): void {
+  failure = failed(error);
+  render();
 }
 
 bridge.cooperate({
@@ -96,7 +101,7 @@ async function start(): Promise<void> {
   const runtime = await bridge.runtime;
   const refusals = await runtime.observe('connection-refusal');
   const follow = (held: Refusal | null) => {
-    refusal = held === null ? null : refused(held);
+    refusal = held === null ? null : refused(held, () => void runtime.retry().catch(fail));
     render();
   };
   refusals.subscribe(follow);
@@ -115,7 +120,4 @@ async function start(): Promise<void> {
   render();
 }
 
-start().catch((error: unknown) => {
-  failure = failed(error);
-  render();
-});
+start().catch(fail);

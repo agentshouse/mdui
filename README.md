@@ -16,9 +16,10 @@ selected and the list scrolled where it was; the bridge's `docs/families.md`
 describes that contract.
 
 When House refuses the connection or the runtime fails to start, the page
-shows the code it received, known or not, in place of the list, offers Try
-again, which reloads the page, only when that refusal or failure is
-retryable, and its `ready()` answers `false`.
+shows the code it received, known or not, in place of the list, and its
+`ready()` answers `false`. It offers Try again only when the runtime's refusal
+or the failure is retryable: a refusal's asks the runtime to retry, and a
+failure's reloads the page.
 
 ## Build
 
