@@ -10,6 +10,11 @@ TypeScript: `index.html`, `main.ts`, `app.json` and `schema.yaml`.
 package `@agentshouse/mdruntime` describes what the client offers. House's
 `find_command` "App" is the guide to building an App or a Site from mdui.
 
+A click selects a document. `main.ts` registers `houseBridge().cooperate`, so
+a newer release of the App takes over the open page with the same document
+selected and the list scrolled where it was; the bridge's `docs/families.md`
+describes that contract.
+
 ## Build
 
 ```sh

@@ -19,6 +19,18 @@
         color: var(--text);
         font-family: system-ui, sans-serif;
       }
+      li button {
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        text-align: start;
+        cursor: pointer;
+      }
+      li button[aria-current='true'] {
+        font-weight: bold;
+      }
     </style>
   </head>
   <body>
