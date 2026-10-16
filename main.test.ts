@@ -61,10 +61,25 @@ beforeAll(() => {
   execFileSync('npm', ['run', 'build'], { stdio: 'inherit' });
 });
 
+function alerted(): string | undefined {
+  return document.querySelector('main [role="alert"]')?.textContent ?? undefined;
+}
+
+function offered(): string[] {
+  return [...document.querySelectorAll('main > button')].map((button) => button.textContent ?? '');
+}
+
+function reloads(): ReturnType<typeof vi.fn> {
+  const reload = vi.spyOn(location, 'reload').mockImplementation(() => {});
+  onTestFinished(() => reload.mockRestore());
+  return reload;
+}
+
 function served(
   adapter: ReturnType<typeof createMemoryAdapter>,
+  store: IDBFactory = new IDBFactory(),
 ): ReturnType<typeof serveMdRuntime> {
-  globalThis.indexedDB = new IDBFactory();
+  globalThis.indexedDB = store;
   const stopped = new AbortController();
   onTestFinished(() => stopped.abort());
   return serveMdRuntime({
@@ -173,3 +188,98 @@ test('a checkpoint asked while a task is still being restored answers the restor
   expect(await restoring).toBe(true);
   expect(await checkpointed).toEqual(task);
 });
+
+test.each([
+  { retryable: true, offers: ['Try again'] },
+  { retryable: false, offers: [] },
+])(
+  'a refused connection shows the refusal in place of the list, offers Try again only when it may pass ($retryable), and never answers ready',
+  async ({ retryable, offers }) => {
+    const adapter = createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) });
+    adapter.script('discover', {
+      kind: 'contract-unavailable',
+      code: 'future-contract-refusal',
+      fields: { contract: 'future' },
+      retryable,
+    });
+    const reload = reloads();
+    const refused = await opened(served(adapter));
+
+    await vi.waitFor(() =>
+      expect(alerted()).toBe(
+        'House refused the connection (missing-required-guarantee: future-contract-refusal).',
+      ),
+    );
+    expect(listed()).toEqual([]);
+    expect(offered()).toEqual(offers);
+    expect(await refused.restore({ selected: { room: 'notes', path: 'todo.md' }, top: 0 })).toBe(
+      false,
+    );
+
+    document.querySelector<HTMLButtonElement>('main > button')?.click();
+    expect(reload).toHaveBeenCalledTimes(offers.length);
+  },
+);
+
+test('a refusal that arrives while the list shows replaces the list and readiness answers no', async () => {
+  const adapter = createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) });
+  const running = await opened(served(adapter));
+  await vi.waitFor(() => expect(listed()).toEqual(['Notes: todo.md']));
+
+  adapter.script('discover', {
+    kind: 'contract-unavailable',
+    code: 'future-contract-refusal',
+    fields: {},
+    retryable: true,
+  });
+  adapter.close();
+  adapter.open();
+
+  await vi.waitFor(() =>
+    expect(alerted()).toBe(
+      'House refused the connection (missing-required-guarantee: future-contract-refusal).',
+    ),
+  );
+  expect(listed()).toEqual([]);
+  expect(await running.restore(null)).toBe(false);
+});
+
+test.each([
+  {
+    store: 'a store the browser denies',
+    open() {
+      throw new DOMException('The user denied storage', 'SecurityError');
+    },
+    code: 'runtime-failure',
+    offers: [],
+  },
+  {
+    store: 'a store failing with a code mdui does not know',
+    open() {
+      throw Object.assign(new Error('the store is busy'), {
+        code: 'future-store-failure',
+        retryable: true,
+      });
+    },
+    code: 'future-store-failure',
+    offers: ['Try again'],
+  },
+])(
+  'a runtime that fails to start over $store shows the failure, offers Try again only when it may pass, and answers not ready',
+  async ({ open, code, offers }) => {
+    const reload = reloads();
+    const failing = await opened(
+      served(createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) }), {
+        open,
+      } as unknown as IDBFactory),
+    );
+
+    await vi.waitFor(() => expect(alerted()).toBe(`mdui could not start (${code}).`));
+    expect(listed()).toEqual([]);
+    expect(offered()).toEqual(offers);
+    expect(await failing.restore({ selected: null, top: 0 })).toBe(false);
+
+    document.querySelector<HTMLButtonElement>('main > button')?.click();
+    expect(reload).toHaveBeenCalledTimes(offers.length);
+  },
+);
