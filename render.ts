@@ -18,6 +18,8 @@ export type Selected = {
   readonly path: string;
 };
 
+const shown = new WeakMap<Element, Selected>();
+
 export function renderRooms(
   main: Element,
   rooms: readonly ListedRoom[],
@@ -30,6 +32,9 @@ export function renderRooms(
     return;
   }
   const documents = query.documents;
+  const focus = document.activeElement;
+  const focused = focus && main.contains(focus) ? shown.get(focus) : undefined;
+  let refocus: HTMLButtonElement | undefined;
   main.replaceChildren(
     ...rooms
       .filter((room) => room.roomVersion !== null)
@@ -44,6 +49,8 @@ export function renderRooms(
               const button = document.createElement('button');
               button.type = 'button';
               button.textContent = held.path;
+              shown.set(button, held);
+              if (held.room === focused?.room && held.path === focused.path) refocus = button;
               if (held.room === selected?.room && held.path === selected.path) {
                 button.setAttribute('aria-current', 'true');
               }
@@ -62,4 +69,5 @@ export function renderRooms(
         return section;
       }),
   );
+  refocus?.focus({ preventScroll: true });
 }

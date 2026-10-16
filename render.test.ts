@@ -58,3 +58,21 @@ test('marks the selected document current and moves the mark to the one clicked'
   expect(current()).toEqual(['ideas/first.md']);
   expect(chosen).toEqual([{ room: 'notes', path: 'ideas/first.md' }]);
 });
+
+test('keeps keyboard focus on the focused document when a change draws the list again', () => {
+  const main = document.body.appendChild(document.createElement('main'));
+  const draw = (paths: string[]) =>
+    renderRooms(
+      main,
+      [{ locator: 'notes', name: 'Notes', roomVersion: 'notes-1' }],
+      { documents: paths.map((path) => ({ room: 'notes', path })) },
+      null,
+      () => {},
+    );
+  draw(['ideas/first.md', 'todo.md']);
+  main.querySelectorAll('button')[1]!.focus();
+
+  draw(['arrived.md', 'ideas/first.md', 'todo.md']);
+  expect(document.activeElement?.textContent).toBe('todo.md');
+  main.remove();
+});
