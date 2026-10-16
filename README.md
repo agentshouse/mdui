@@ -15,6 +15,12 @@ a newer release of the App takes over the open page with the same document
 selected and the list scrolled where it was; the bridge's `docs/families.md`
 describes that contract.
 
+When House refuses the connection or the runtime fails to start, the page
+shows the code it received, known or not, in place of the list, and its
+`ready()` answers `false`. It offers Try again only when the runtime's refusal
+or the failure is retryable: a refusal's asks the runtime to retry, and a
+failure's reloads the page.
+
 ## Build
 
 ```sh

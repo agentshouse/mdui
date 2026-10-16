@@ -20,6 +20,21 @@ export type Selected = {
 
 const shown = new WeakMap<Element, Selected>();
 
+export function renderStopped(main: Element, said: string, retry: (() => void) | null): void {
+  const alert = document.createElement('p');
+  alert.setAttribute('role', 'alert');
+  alert.textContent = said;
+  if (retry === null) {
+    main.replaceChildren(alert);
+    return;
+  }
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = 'Try again';
+  button.addEventListener('click', retry);
+  main.replaceChildren(alert, button);
+}
+
 export function renderRooms(
   main: Element,
   rooms: readonly ListedRoom[],
