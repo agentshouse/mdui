@@ -2,7 +2,9 @@
 
 mdui is the minimal [agents.house](https://agents.house) App that every new App
 and Template starts from. It lists the documents of the Room its one `room`
-slot binds and updates the list as they change. It is framework-free
+slot binds and updates the list as they change. While the slot binds none, it
+says so and offers a signed-in User Choose Rooms, which opens House's page that
+binds them at that slot and returns to the App. It is framework-free
 TypeScript: `index.html`, `main.ts`, `app.json` and `schema.yaml`.
 
 `main.ts` takes the runtime client House hands the App,

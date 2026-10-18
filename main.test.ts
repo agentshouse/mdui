@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { houseBridge, type HouseStatus } from '@agentshouse/app-bridge';
 import { createHouseBridgeTestHost } from '@agentshouse/app-bridge/test-host';
 import { connectMdRuntime } from '@agentshouse/mdruntime/client';
 import { serveMdRuntime } from '@agentshouse/mdruntime/host';
@@ -94,16 +95,33 @@ function served(
   });
 }
 
+function status(credential: HouseStatus['credential']['state']): HouseStatus {
+  return {
+    app: 'a_52.r',
+    preferences: null,
+    runtime: 'runtime-1',
+    credential: { state: credential, expiresAt: null },
+    sync: null,
+    refusal: null,
+    loss: null,
+    analytics: { measures: false, choice: null },
+    serviceMode: 'open',
+    offline: false,
+  };
+}
+
 async function opened(
   runtime: ReturnType<typeof serveMdRuntime>,
+  bound: string[] = ['notes'],
+  shown: HouseStatus = status('held'),
 ): Promise<ReturnType<typeof createHouseBridgeTestHost>> {
   const channel = new MessageChannel();
   runtime.attach(channel.port1, 'mdui', undefined, {
-    rooms: ['notes'],
+    rooms: bound,
     documents: [{ room: 'private', path: preferences }],
     conversations: false,
   });
-  const house = createHouseBridgeTestHost();
+  const house = createHouseBridgeTestHost({ status: shown });
   house.attachRuntime(connectMdRuntime(channel.port2));
   const entry = new DOMParser().parseFromString(
     readFileSync('dist/index.html', 'utf8'),
@@ -307,4 +325,54 @@ test('Try again after a start-up failure that may pass opens the App again over 
   const reopened = await opened(runtime);
   expect(await reopened.restore(null)).toBe(true);
   expect(listed()).toEqual(['Notes: todo.md']);
+});
+
+test('an App whose slot binds no Room says so, answers ready and opens the choice of its Rooms at that slot', async () => {
+  const unbound = await opened(
+    served(createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) })),
+    [],
+  );
+
+  await vi.waitFor(() => expect(offered()).toEqual(['Choose Rooms']));
+  expect(document.querySelector('main > p')?.textContent).toBe('No Room is chosen yet.');
+  expect(listed()).toEqual([]);
+  expect(await unbound.restore(null)).toBe(true);
+
+  document.querySelector<HTMLButtonElement>('main > button')?.click();
+  expect(unbound.ceremonies).toEqual(['/bind/a_52.r?slot=room']);
+});
+
+test('a page whose slot binds no Room offers no choice of Rooms without a signed-in User, as at a Site', async () => {
+  const visited = await opened(
+    served(createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) })),
+    [],
+    status('none'),
+  );
+
+  await vi.waitFor(() =>
+    expect(document.querySelector('main > p')?.textContent).toBe('No Room is chosen yet.'),
+  );
+  expect(offered()).toEqual([]);
+  expect(await visited.restore(null)).toBe(true);
+
+  visited.publish(status('held'));
+  await vi.waitFor(() => expect(offered()).toEqual(['Choose Rooms']));
+});
+
+test("a refused choice of Rooms shows House's code in its place", async () => {
+  await opened(
+    served(createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) })),
+    [],
+  );
+  await vi.waitFor(() => expect(offered()).toEqual(['Choose Rooms']));
+  const ceremony = vi
+    .spyOn(houseBridge(), 'ceremony')
+    .mockRejectedValue(Object.assign(new Error('refused'), { code: 'house_ceremony_refused' }));
+  onTestFinished(() => ceremony.mockRestore());
+
+  document.querySelector<HTMLButtonElement>('main > button')?.click();
+  await vi.waitFor(() =>
+    expect(alerted()).toBe('House did not open the choice of Rooms (house_ceremony_refused).'),
+  );
+  expect(offered()).toEqual([]);
 });

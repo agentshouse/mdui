@@ -35,15 +35,39 @@ export function renderStopped(main: Element, said: string, retry: (() => void) |
   main.replaceChildren(alert, button);
 }
 
+const unbound = new WeakMap<Element, (() => void) | null>();
+
+function renderUnbound(main: Element, choose: (() => void) | null): void {
+  const drawn = main.firstElementChild;
+  if (drawn !== null && unbound.get(drawn) === choose) return;
+  const note = document.createElement('p');
+  note.textContent = 'No Room is chosen yet.';
+  unbound.set(note, choose);
+  if (choose === null) {
+    main.replaceChildren(note);
+    return;
+  }
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = 'Choose Rooms';
+  button.addEventListener('click', choose);
+  main.replaceChildren(note, button);
+}
+
 export function renderRooms(
   main: Element,
   rooms: readonly ListedRoom[],
   query: LocalQuery,
   selected: Selected | null,
   select: (document: Selected) => void,
+  choose: (() => void) | null,
 ): void {
   if ('pending' in query) {
     main.replaceChildren();
+    return;
+  }
+  if (rooms.length === 0) {
+    renderUnbound(main, choose);
     return;
   }
   const documents = query.documents;

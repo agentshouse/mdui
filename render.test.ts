@@ -17,7 +17,7 @@ test('withholds Room lists for a pending Local Query until its documents arrive'
     { locator: 'arriving', name: 'Arriving', roomVersion: 'arriving-1' },
   ];
 
-  renderRooms(main, rooms, { pending: true }, null, () => {});
+  renderRooms(main, rooms, { pending: true }, null, () => {}, null);
   expect(listed(main)).toEqual([]);
 
   renderRooms(
@@ -31,6 +31,7 @@ test('withholds Room lists for a pending Local Query until its documents arrive'
     },
     null,
     () => {},
+    null,
   );
   expect(listed(main)).toEqual(['Notes: ideas/first.md', 'Arriving: todo.md']);
 });
@@ -49,6 +50,7 @@ test('marks the selected document current and moves the mark to the one clicked'
     },
     { room: 'notes', path: 'todo.md' },
     (document) => chosen.push(document),
+    null,
   );
   const current = () =>
     [...main.querySelectorAll('[aria-current="true"]')].map((button) => button.textContent);
@@ -68,6 +70,7 @@ test('keeps keyboard focus on the focused document when a change draws the list 
       { documents: paths.map((path) => ({ room: 'notes', path })) },
       null,
       () => {},
+      null,
     );
   draw(['ideas/first.md', 'todo.md']);
   main.querySelectorAll('button')[1]!.focus();
@@ -75,4 +78,21 @@ test('keeps keyboard focus on the focused document when a change draws the list 
   draw(['arrived.md', 'ideas/first.md', 'todo.md']);
   expect(document.activeElement?.textContent).toBe('todo.md');
   main.remove();
+});
+
+test('draws no Room chosen once and keeps its button across later changes, so a tap during them lands', () => {
+  const main = document.createElement('main');
+  const chosen: string[] = [];
+  const choose = () => chosen.push('rooms');
+  const draw = () => renderRooms(main, [], { documents: [] }, null, () => {}, choose);
+
+  draw();
+  const button = main.querySelector('button');
+  draw();
+  draw();
+
+  expect(main.textContent).toBe('No Room is chosen yet.Choose Rooms');
+  expect(main.querySelector('button')).toBe(button);
+  button!.click();
+  expect(chosen).toEqual(['rooms']);
 });

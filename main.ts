@@ -35,10 +35,15 @@ function refused(refusal: Refusal, retry: () => void): Stop {
   };
 }
 
+function codeOf(error: unknown): string {
+  const held = error as { readonly code?: unknown } | null;
+  return typeof held?.code === 'string' ? held.code : String(error);
+}
+
 function failed(error: unknown): Stop {
-  const held = error as { readonly code?: unknown; readonly retryable?: unknown } | null;
+  const held = error as { readonly retryable?: unknown } | null;
   return {
-    said: `mdui could not start (${typeof held?.code === 'string' ? held.code : String(error)}).`,
+    said: `mdui could not start (${codeOf(error)}).`,
     retry: held?.retryable === true ? () => location.reload() : null,
   };
 }
@@ -52,6 +57,7 @@ let failure: Stop | null = null;
 let list: (() => void) | null = null;
 let selected: Selected | null = null;
 let restored = Promise.resolve();
+let chooser: string | null = null;
 
 function decide(next: boolean | null): void {
   usable = next;
@@ -78,6 +84,21 @@ function fail(error: unknown): void {
   failure = failed(error);
   render();
 }
+
+function choose(): void {
+  if (chooser === null) return;
+  bridge.ceremony(`/bind/${encodeURIComponent(chooser)}?slot=room`).catch((error: unknown) => {
+    failure = { said: `House did not open the choice of Rooms (${codeOf(error)}).`, retry: null };
+    render();
+  });
+}
+
+bridge.onStatus((status) => {
+  const next = status.credential.state === 'held' ? status.app : null;
+  if (next === chooser) return;
+  chooser = next;
+  render();
+});
 
 bridge.cooperate({
   checkpoint: () => restored,
@@ -110,9 +131,16 @@ async function start(): Promise<void> {
   const documents = await runtime.observe('query', { select: {}, orderBy: [{ by: 'path' }] });
   list = () => {
     const answer = documents.current();
-    renderRooms(main, rooms.current(), answer, selected, (document) => {
-      selected = document;
-    });
+    renderRooms(
+      main,
+      rooms.current(),
+      answer,
+      selected,
+      (document) => {
+        selected = document;
+      },
+      chooser === null ? null : choose,
+    );
     decide('pending' in answer ? null : true);
   };
   rooms.subscribe(render);
