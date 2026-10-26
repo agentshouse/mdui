@@ -2,26 +2,21 @@
 
 mdui is the minimal [agents.house](https://agents.house) App that every new App
 and Template starts from. It lists the documents of the Room its one `room`
-slot binds and updates the list as they change. While the slot binds none, it
-says so and offers a signed-in User Choose Rooms, which opens House's page that
-binds them at that slot and returns to the App. It is framework-free
-TypeScript: `index.html`, `main.ts`, `app.json` and `schema.yaml`.
+slot binds and updates the list as they change; a click selects a document.
+While the slot binds none, it says so and offers a signed-in User Choose Rooms,
+which opens House's page that binds them at that slot and returns to the App.
+It is framework-free TypeScript: `index.html`, `main.ts`, `app.json` and
+`schema.yaml`.
 
 `main.ts` takes the runtime client House hands the App,
 `houseBridge().runtime` from `@agentshouse/app-bridge`; the runtime
 package `@agentshouse/mdruntime` describes what the client offers. House's
 `find_command` "App" is the guide to building an App or a Site from mdui.
 
-A click selects a document. `main.ts` registers `houseBridge().cooperate`, so
-a newer release of the App takes over the open page with the same document
-selected and the list scrolled where it was; the bridge's `docs/families.md`
-describes that contract.
-
 When House refuses the connection or the runtime fails to start, the page
-shows the code it received, known or not, in place of the list, and its
-`ready()` answers `false`. It offers Try again only when the runtime's refusal
-or the failure is retryable: a refusal's asks the runtime to retry, and a
-failure's reloads the page.
+shows the code it received, known or not, in place of the list. It offers Try
+again only when the runtime's refusal or the failure is retryable: a refusal's
+asks the runtime to retry, and a failure's reloads the page.
 
 ## Build
 

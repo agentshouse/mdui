@@ -10,7 +10,7 @@
     "publish": "node publish.mjs"
   },
   "dependencies": {
-    "@agentshouse/app-bridge": "0.1.0-ca6680715449a"
+    "@agentshouse/app-bridge": "0.1.0-c5552116f06db"
   },
   "devDependencies": {
     "@agentshouse/mdruntime": "0.1.0-c454894e67f74",

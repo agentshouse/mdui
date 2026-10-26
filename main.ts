@@ -1,11 +1,6 @@
 import { houseBridge } from '@agentshouse/app-bridge';
 import { renderRooms, renderStopped, type Selected } from './render.js';
 
-type Task = {
-  readonly selected: Selected | null;
-  readonly top: number;
-};
-
 type Refusal = {
   readonly code: string;
   readonly retryable: boolean;
@@ -16,15 +11,6 @@ type Stop = {
   readonly said: string;
   readonly retry: (() => void) | null;
 };
-
-function captured(task: unknown): task is Task {
-  const held = task as Partial<Task> | null;
-  return (
-    typeof held?.top === 'number' &&
-    (held.selected === null ||
-      (typeof held.selected?.room === 'string' && typeof held.selected.path === 'string'))
-  );
-}
 
 function refused(refusal: Refusal, retry: () => void): Stop {
   const codes =
@@ -50,25 +36,11 @@ function failed(error: unknown): Stop {
 
 const bridge = houseBridge();
 const main = document.querySelector('main')!;
-const deciding = new Set<(usable: boolean) => void>();
-let usable: boolean | null = null;
 let refusal: Stop | null = null;
 let failure: Stop | null = null;
 let list: (() => void) | null = null;
 let selected: Selected | null = null;
-let restored = Promise.resolve();
 let chooser: string | null = null;
-
-function decide(next: boolean | null): void {
-  usable = next;
-  if (next === null) return;
-  for (const answer of deciding) answer(next);
-  deciding.clear();
-}
-
-function decided(): Promise<boolean> {
-  return usable === null ? new Promise((answer) => deciding.add(answer)) : Promise.resolve(usable);
-}
 
 function render(): void {
   const stop = refusal ?? failure;
@@ -77,7 +49,6 @@ function render(): void {
     return;
   }
   renderStopped(main, stop.said, stop.retry);
-  decide(false);
 }
 
 function fail(error: unknown): void {
@@ -100,24 +71,6 @@ bridge.onStatus((status) => {
   render();
 });
 
-bridge.cooperate({
-  checkpoint: () => restored,
-  persist() {},
-  capture: (): Task => ({ selected, top: window.scrollY }),
-  restore(task) {
-    if (task === null) return;
-    if (!captured(task)) throw new TypeError('mdui did not capture this task');
-    restored = decided().then(() => {
-      selected = task.selected;
-      render();
-      window.scrollTo({ top: task.top });
-    });
-    return restored;
-  },
-  ready: decided,
-  settle() {},
-});
-
 async function start(): Promise<void> {
   const runtime = await bridge.runtime;
   const refusals = await runtime.observe('connection-refusal');
@@ -129,20 +82,17 @@ async function start(): Promise<void> {
   follow(refusals.current());
   const rooms = await runtime.observe('rooms');
   const documents = await runtime.observe('query', { select: {}, orderBy: [{ by: 'path' }] });
-  list = () => {
-    const answer = documents.current();
+  list = () =>
     renderRooms(
       main,
       rooms.current(),
-      answer,
+      documents.current(),
       selected,
       (document) => {
         selected = document;
       },
       chooser === null ? null : choose,
     );
-    decide('pending' in answer ? null : true);
-  };
   rooms.subscribe(render);
   documents.subscribe(render);
   render();

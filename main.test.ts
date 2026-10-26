@@ -31,12 +31,6 @@ function room(
   };
 }
 
-function selected(): string[] {
-  return [...document.querySelectorAll('li [aria-current="true"]')].map(
-    (button) => button.textContent ?? '',
-  );
-}
-
 function listed(): string[] {
   return [...document.querySelectorAll('section')].map(
     (section) =>
@@ -104,6 +98,7 @@ function status(credential: HouseStatus['credential']['state']): HouseStatus {
     sync: null,
     refusal: null,
     loss: null,
+    database: null,
     analytics: { measures: false, choice: null },
     serviceMode: 'open',
     offline: false,
@@ -128,7 +123,6 @@ async function opened(
     'text/html',
   );
   document.body.innerHTML = entry.body.innerHTML;
-  window.scrollTo({ top: 0 });
   vi.resetModules();
   await import(pathToFileURL('dist/main.js').href);
   return house;
@@ -147,68 +141,8 @@ test('the built App lists the bound Room alone and shows a document written afte
   );
 });
 
-test('a newer release opens on the document the User selected, with the list scrolled where they left it', async () => {
-  const notes = Object.fromEntries(
-    Array.from({ length: 40 }, (_, index) => [
-      `notes/${String(index).padStart(2, '0')}.md`,
-      '# Note\n',
-    ]),
-  );
-  const runtime = served(createMemoryAdapter({ rooms: rooms('notes-1', notes) }));
-  const running = await opened(runtime);
-  await vi.waitFor(() => expect(document.querySelectorAll('li button')).toHaveLength(40));
-  const chosen = [...document.querySelectorAll('li button')].find(
-    (button) => button.textContent === 'notes/31.md',
-  ) as HTMLButtonElement;
-  chosen.click();
-  expect(selected()).toEqual(['notes/31.md']);
-  window.scrollTo({ top: 640 });
-
-  const task = await running.checkpoint();
-  const newer = await opened(runtime);
-  expect(selected()).toEqual([]);
-  expect(window.scrollY).toBe(0);
-
-  expect(await newer.restore(task)).toBe(true);
-  expect(selected()).toEqual(['notes/31.md']);
-  expect(window.scrollY).toBe(640);
-  newer.settle('committed');
-});
-
-test('a release opened without a task starts at the top with nothing selected and declines a task it did not capture', async () => {
-  const runtime = served(
-    createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) }),
-  );
-
-  const fresh = await opened(runtime);
-  expect(await fresh.restore(null)).toBe(true);
-  expect(listed()).toEqual(['Notes: todo.md']);
-  expect(selected()).toEqual([]);
-  expect(window.scrollY).toBe(0);
-
-  const foreign = await opened(runtime);
-  await expect(foreign.restore({ open: 'todo.md' })).rejects.toThrow();
-});
-
-test('a checkpoint asked while a task is still being restored answers the restored task', async () => {
-  const adapter = createMemoryAdapter({
-    rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }),
-    unopened: true,
-  });
-  const reopened = await opened(served(adapter));
-  const task = { selected: { room: 'notes', path: 'todo.md' }, top: 120 };
-
-  const restoring = reopened.restore(task);
-  const checkpointed = reopened.checkpoint();
-  expect(listed()).toEqual([]);
-  adapter.open();
-
-  expect(await restoring).toBe(true);
-  expect(await checkpointed).toEqual(task);
-});
-
 test.each([{ retryable: true }, { retryable: false }])(
-  'a refused connection shows the refusal in place of the list, offers no Try again the runtime would not attempt, House retryable or not ($retryable), and never answers ready',
+  'a refused connection shows the refusal in place of the list, offers no Try again the runtime would not attempt, House retryable or not ($retryable)',
   async ({ retryable }) => {
     const adapter = createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) });
     adapter.script('discover', {
@@ -217,7 +151,7 @@ test.each([{ retryable: true }, { retryable: false }])(
       fields: { contract: 'future' },
       retryable,
     });
-    const refused = await opened(served(adapter));
+    await opened(served(adapter));
 
     await vi.waitFor(() =>
       expect(alerted()).toBe(
@@ -226,15 +160,12 @@ test.each([{ retryable: true }, { retryable: false }])(
     );
     expect(listed()).toEqual([]);
     expect(offered()).toEqual([]);
-    expect(await refused.restore({ selected: { room: 'notes', path: 'todo.md' }, top: 0 })).toBe(
-      false,
-    );
   },
 );
 
-test('a refusal that arrives while the list shows replaces the list and readiness answers no', async () => {
+test('a refusal that arrives while the list shows replaces the list', async () => {
   const adapter = createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) });
-  const running = await opened(served(adapter));
+  await opened(served(adapter));
   await vi.waitFor(() => expect(listed()).toEqual(['Notes: todo.md']));
 
   adapter.script('discover', {
@@ -252,7 +183,6 @@ test('a refusal that arrives while the list shows replaces the list and readines
     ),
   );
   expect(listed()).toEqual([]);
-  expect(await running.restore(null)).toBe(false);
 });
 
 test.each([
@@ -276,10 +206,10 @@ test.each([
     offers: ['Try again'],
   },
 ])(
-  'a runtime that fails to start over $store shows the failure, offers Try again only when it may pass, and answers not ready',
+  'a runtime that fails to start over $store shows the failure, offers Try again only when it may pass',
   async ({ open, code, offers }) => {
     const reload = reloads();
-    const failing = await opened(
+    await opened(
       served(createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) }), {
         open,
       } as unknown as IDBFactory),
@@ -288,7 +218,6 @@ test.each([
     await vi.waitFor(() => expect(alerted()).toBe(`mdui could not start (${code}).`));
     expect(listed()).toEqual([]);
     expect(offered()).toEqual(offers);
-    expect(await failing.restore({ selected: null, top: 0 })).toBe(false);
 
     document.querySelector<HTMLButtonElement>('main > button')?.click();
     expect(reload).toHaveBeenCalledTimes(offers.length);
@@ -322,12 +251,11 @@ test('Try again after a start-up failure that may pass opens the App again over 
   adapter.open();
   document.querySelector<HTMLButtonElement>('main > button')?.click();
   expect(reload).toHaveBeenCalledOnce();
-  const reopened = await opened(runtime);
-  expect(await reopened.restore(null)).toBe(true);
-  expect(listed()).toEqual(['Notes: todo.md']);
+  await opened(runtime);
+  await vi.waitFor(() => expect(listed()).toEqual(['Notes: todo.md']));
 });
 
-test('an App whose slot binds no Room says so, answers ready and opens the choice of its Rooms at that slot', async () => {
+test('an App whose slot binds no Room says so and opens the choice of its Rooms at that slot', async () => {
   const unbound = await opened(
     served(createMemoryAdapter({ rooms: rooms('notes-1', { 'todo.md': '# Todo\n' }) })),
     [],
@@ -336,7 +264,6 @@ test('an App whose slot binds no Room says so, answers ready and opens the choic
   await vi.waitFor(() => expect(offered()).toEqual(['Choose Rooms']));
   expect(document.querySelector('main > p')?.textContent).toBe('No Room is chosen yet.');
   expect(listed()).toEqual([]);
-  expect(await unbound.restore(null)).toBe(true);
 
   document.querySelector<HTMLButtonElement>('main > button')?.click();
   expect(unbound.ceremonies).toEqual(['/bind/a_52.r?slot=room']);
@@ -353,7 +280,6 @@ test('a page whose slot binds no Room offers no choice of Rooms without a signed
     expect(document.querySelector('main > p')?.textContent).toBe('No Room is chosen yet.'),
   );
   expect(offered()).toEqual([]);
-  expect(await visited.restore(null)).toBe(true);
 
   visited.publish(status('held'));
   await vi.waitFor(() => expect(offered()).toEqual(['Choose Rooms']));
