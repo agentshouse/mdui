@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>mdui</title>
+    <script type="module" src="main.js"></script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --background: Canvas;
+        --text: CanvasText;
+      }
+      body {
+        margin: 0 auto;
+        max-width: 48rem;
+        padding: 1rem;
+        background: var(--background);
+        color: var(--text);
+        font-family: system-ui, sans-serif;
+      }
+      li button {
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        text-align: start;
+        cursor: pointer;
+      }
+      li button[aria-current='true'] {
+        background: var(--text);
+        color: var(--background);
+      }
+    </style>
+  </head>
+  <body>
+    <main></main>
+  </body>
+</html>
